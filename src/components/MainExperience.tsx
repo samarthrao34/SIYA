@@ -730,24 +730,24 @@ export function MainExperience() {
             children: [
               b.jsx("span", {
                 className:
-                  "text-[7px] font-semibold tracking-[0.3em] text-white/50 uppercase font-sans",
+                  "text-xs font-semibold tracking-[0.3em] text-white/70 uppercase font-sans",
                 children: "Siya",
               }),
               b.jsx("div", {
-                className: `w-1 h-1 rounded-full ${a === "listening" || a === "speaking" ? "bg-cyan-400" : "bg-white/10"}`,
+                className: `w-1.5 h-1.5 rounded-full ${a === "listening" || a === "speaking" ? "bg-cyan-400" : "bg-white/10"}`,
               }),
             ],
           }),
           b.jsxs("div", {
-            className: "flex items-center gap-2",
+            className: "flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1.5",
             children: [
               b.jsxs("button", {
                 onClick: () => ct(!nt),
                 className:
-                  "flex items-center gap-0.5 opacity-25 hover:opacity-100 text-white transition text-[6px] font-mono tracking-widest cursor-pointer",
+                  "flex items-center gap-1 opacity-60 hover:opacity-100 text-white transition text-[10px] font-medium tracking-wider cursor-pointer",
                 title: "Sway Themes and Info",
                 children: [
-                  b.jsx(gp, { size: 9 }),
+                  b.jsx(gp, { size: 13 }),
                   b.jsx("span", {
                     className: "hidden sm:inline",
                     children: "TOPICS",
@@ -756,10 +756,10 @@ export function MainExperience() {
               }),
               b.jsxs("button", {
                 onClick: () => setHealthOpen(!healthOpen),
-                className: `flex items-center gap-0.5 transition text-[6px] font-mono tracking-widest cursor-pointer ${healthOpen ? "text-cyan-400 opacity-100 font-semibold" : "opacity-25 hover:opacity-100 text-white"}`,
+                className: `flex items-center gap-1 transition text-[10px] font-medium tracking-wider cursor-pointer ${healthOpen ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
                 title: "Health Data Dashboard",
                 children: [
-                  b.jsx(hp, { size: 9 }),
+                  b.jsx(hp, { size: 13 }),
                   b.jsx("span", {
                     className: "hidden sm:inline",
                     children: "DATA",
@@ -789,10 +789,10 @@ export function MainExperience() {
               b.jsxs("button", {
                 onClick: () => De(!Re),
                 className:
-                  "flex items-center gap-0.5 opacity-25 hover:opacity-100 text-white transition text-[6px] font-mono tracking-widest cursor-pointer",
+                  "flex items-center gap-1 opacity-60 hover:opacity-100 text-white transition text-[10px] font-medium tracking-wider cursor-pointer",
                 title: "Recollections Database",
                 children: [
-                  b.jsx(Vo, { size: 9 }),
+                  b.jsx(Vo, { size: 13 }),
                   b.jsx("span", {
                     className: "hidden sm:inline",
                     children: "RECALLS",
@@ -801,11 +801,11 @@ export function MainExperience() {
               }),
               b.jsxs("button", {
                 onClick: s ? W : U,
-                className: `flex items-center gap-0.5 transition text-[6px] font-mono tracking-widest cursor-pointer ${s ? "text-cyan-400 opacity-100 font-semibold" : "opacity-25 hover:opacity-100 text-white"}`,
+                className: `flex items-center gap-1 transition text-[10px] font-medium tracking-wider cursor-pointer ${s ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
                 title: "Share Screen with Siya",
                 children: [
                   b.jsx(mS, {
-                    size: 9,
+                    size: 13,
                     className: s && !r ? "animate-pulse text-cyan-400" : "",
                   }),
                   b.jsx("span", { children: s ? "SHARING" : "SHARE SCREEN" }),
@@ -831,14 +831,14 @@ export function MainExperience() {
               }),
               b.jsxs("button", {
                 onClick: camOn ? stopCamera : startCamera,
-                className: `flex items-center gap-0.5 transition text-[6px] font-mono tracking-widest cursor-pointer ${camOn ? "text-cyan-400 opacity-100 font-semibold" : "opacity-25 hover:opacity-100 text-white"}`,
+                className: `flex items-center gap-1 transition text-[10px] font-medium tracking-wider cursor-pointer ${camOn ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
                 title: "Let Siya see you through your camera",
                 children: [
                   b.jsx(cS, {
-                    size: 9,
+                    size: 13,
                     className: camOn ? "animate-pulse text-cyan-400" : "",
                   }),
-                  b.jsx("span", { children: camOn ? "WATCHING YOU" : "CAMERA" }),
+                  b.jsx("span", { children: camOn ? "CAMERA ON" : "CAMERA" }),
                   camOn && detectedEmotion && detectedEmotion.emotion !== "neutral" &&
                     b.jsx("span", {
                       className: "opacity-70 lowercase",
@@ -849,11 +849,11 @@ export function MainExperience() {
               }),
               b.jsxs("button", {
                 onClick: () => Pn(!ke),
-                className: `flex items-center gap-0.5 transition text-[6px] font-mono tracking-widest cursor-pointer ${ke ? "text-cyan-400 opacity-100 font-semibold" : "opacity-25 hover:opacity-100 text-white"}`,
+                className: `flex items-center gap-1 transition text-[10px] font-medium tracking-wider cursor-pointer ${ke ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
                 title: "Siya Configuration",
                 children: [
                   b.jsx(ey, {
-                    size: 9,
+                    size: 13,
                     className: ke ? "animate-spin [animation-duration:6s]" : "",
                   }),
                   b.jsx("span", { children: "SETTINGS" }),
@@ -1047,13 +1047,13 @@ export function MainExperience() {
       }),
       b.jsxs("footer", {
         className:
-          "relative z-10 w-full max-w-2xl mx-auto flex flex-col items-center gap-5 mt-auto",
+          "relative z-10 w-full max-w-2xl mx-auto flex flex-col items-center gap-3 mt-auto",
         children: [
           b.jsxs("form", {
             onSubmit: ea,
-            style: { maxWidth: "200px", marginTop: "28px" },
+            style: { maxWidth: "340px", order: 3 },
             className:
-              "flex w-full items-center gap-1 rounded-lg border border-white/10 bg-black/10 p-0.5 shadow-lg backdrop-blur-sm",
+              "mb-1 flex w-full items-center gap-2 rounded-full border border-white/15 bg-black/45 py-1 pl-4 pr-1 shadow-lg backdrop-blur-md",
             children: [
               b.jsx("input", {
                 value: I,
@@ -1061,15 +1061,15 @@ export function MainExperience() {
                 "aria-label": "Message SIYA",
                 placeholder: "Type a message to SIYA...",
                 className:
-                  "min-w-0 flex-1 bg-transparent px-1.5 py-0.5 text-[10px] text-white outline-none placeholder:text-white/30",
+                  "min-w-0 flex-1 bg-transparent py-1 text-sm text-white outline-none placeholder:text-white/45",
               }),
               b.jsx("button", {
                 type: "submit",
                 "aria-label": "Send message",
                 disabled: !I.trim() || a === "connecting",
                 className:
-                  "flex h-5 w-5 items-center justify-center rounded bg-cyan-500/15 text-cyan-200 ring-1 ring-cyan-400/30 transition hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-35",
-                children: b.jsx(MS, { size: 9 }),
+                  "flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/40 transition hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-35",
+                children: b.jsx(MS, { size: 14 }),
               }),
             ],
           }),
@@ -1094,23 +1094,23 @@ export function MainExperience() {
             }),
           }),
           b.jsxs("div", {
-            className: "flex items-center justify-center relative mb-4",
+            className: "flex items-center justify-center relative",
             children: [
               b.jsx("button", {
                 onClick: Wa,
-                className: `w-7 h-7 rounded-full flex items-center justify-center transition-all duration-500 cursor-pointer ${a === "disconnected" ? "bg-white/10 hover:bg-white/15 border border-white/15 text-white shadow-[0_0_20px_rgba(255,255,255,0.02)] hover:scale-105 active:scale-95" : a === "listening" ? "bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/80 text-cyan-200 shadow-[0_0_35px_rgba(34,211,238,0.3)] animate-pulse scale-105" : a === "speaking" ? "bg-purple-500/90 hover:bg-purple-600 border border-purple-400/95 text-white shadow-[0_0_35px_rgba(168,85,247,0.4)] scale-105" : "bg-amber-600 border border-amber-300 text-white animate-spin"}`,
+                className: `w-11 h-11 rounded-full flex items-center justify-center transition-all duration-500 cursor-pointer ${a === "disconnected" ? "bg-white/10 hover:bg-white/15 border border-white/15 text-white shadow-[0_0_20px_rgba(255,255,255,0.02)] hover:scale-105 active:scale-95" : a === "listening" ? "bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/80 text-cyan-200 shadow-[0_0_35px_rgba(34,211,238,0.3)] animate-pulse scale-105" : a === "speaking" ? "bg-purple-500/90 hover:bg-purple-600 border border-purple-400/95 text-white shadow-[0_0_35px_rgba(168,85,247,0.4)] scale-105" : "bg-amber-600 border border-amber-300 text-white animate-spin"}`,
                 title: a === "disconnected" ? "Awake Siya" : "Sleep core",
                 children:
                   a === "disconnected"
-                    ? b.jsx(ty, { className: "opacity-80", size: 10 })
+                    ? b.jsx(ty, { className: "opacity-80", size: 18 })
                     : a === "connecting"
                       ? b.jsx("div", {
                           className:
                             "w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin",
                         })
                       : a === "listening"
-                        ? b.jsx($g, { size: 10, className: "text-cyan-200" })
-                        : b.jsx(iy, { size: 10, className: "text-white" }),
+                        ? b.jsx($g, { size: 18, className: "text-cyan-200" })
+                        : b.jsx(iy, { size: 18, className: "text-white" }),
               }),
               wt &&
                 b.jsx("button", {

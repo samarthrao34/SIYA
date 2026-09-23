@@ -14,6 +14,17 @@ import { CharacterEngine, CHARACTER_REGISTRY, DEFAULT_CHARACTER_ID } from "./cha
 import { Sparkles as Qo, TriangleAlert as ny } from "lucide-react";
 import * as THREE from "three";
 
+// Camera debug controls (view lock, eye tracking, presets, key hints) are for
+// development. Set localStorage "siya.devControls" to "1" to show them; the
+// keyboard shortcuts work either way.
+function showCameraDevControls(): boolean {
+  try {
+    return localStorage.getItem("siya.devControls") === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function getCharacterPreset(a = DEFAULT_CHARACTER_ID) {
   return CHARACTER_REGISTRY[a] ?? CHARACTER_REGISTRY[DEFAULT_CHARACTER_ID];
 }
@@ -300,6 +311,7 @@ export const CharacterViewport = ({
       F &&
         f &&
         d &&
+        showCameraDevControls() &&
         b.jsxs("div", {
           className:
             "absolute bottom-3 right-3 z-40 flex flex-col items-end gap-1 select-none",

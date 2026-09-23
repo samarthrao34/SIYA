@@ -43,7 +43,7 @@ export function PrivacyCenter() {
         title="Privacy & your data"
       >
         <ShieldCheck className="h-3.5 w-3.5 text-emerald-300/80" />
-        Wellness companion · not a therapist or medical device
+        Wellness companion<span className="hidden xl:inline"> · not a therapist or medical device</span>
       </button>
 
       {open && (

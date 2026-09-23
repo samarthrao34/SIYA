@@ -364,8 +364,11 @@ function createMainWindow() {
   const savedState = loadState(stateFile);
   mainWindow = new BrowserWindow({
     ...restoreBounds(savedState, screen.getAllDisplays()),
-    minWidth: 940,
-    minHeight: 600,
+    // Tiling compositors (e.g. Hyprland) ignore min sizes, and Electron then
+    // lays the page out wider than the real window, which crops the UI. The
+    // layout is responsive down to ~600 px, so keep the minimum small.
+    minWidth: 600,
+    minHeight: 500,
     show: false, // revealed on ready-to-show to avoid a white flash
     backgroundColor: '#0a0a0f',
     autoHideMenuBar: true,
