@@ -3451,7 +3451,7 @@ export class kh {
     this.config = i;
   }
   setEnabled(i) {
-    ((this.enabled = i), !i && this.active && (this.active.releasing = !0));
+    ((this.enabled = i), !i && this.active && !this.active.forced && (this.active.releasing = !0));
   }
   get currentName() {
     var i;
@@ -3479,9 +3479,10 @@ export class kh {
     for (const f of o) if (((h -= f.weight), h <= 0)) return f;
     return o[o.length - 1];
   }
-  trigger(i) {
+  /** `force`: play even outside the behaviour's allowed activities (e.g. a greeting wave while listening). */
+  trigger(i, force = !1) {
     const s = this.library.find((o) => o.name === i);
-    return s ? (this.begin(s), !0) : !1;
+    return s ? (this.begin(s), force && (this.active.forced = !0), !0) : !1;
   }
   begin(i) {
     for (
@@ -3510,8 +3511,7 @@ export class kh {
         g.releasing
           ? ((g.weight = Math.max(0, g.weight - s * 3)),
             g.weight <= 0.001 && ((this.active = null), this.schedule(o)))
-          : !(g.behaviour.allowedIn ?? ["idle"]).includes(o) ||
-              !this.enabled ||
+          : (!g.forced && (!(g.behaviour.allowedIn ?? ["idle"]).includes(o) || !this.enabled)) ||
               g.elapsed >= g.behaviour.duration
             ? (g.releasing = !0)
             : (g.weight = kh.envelope(g.behaviour, g.elapsed, !1)),
@@ -3882,6 +3882,10 @@ export class CharacterEngine {
   }
   setFrameInput(i) {
     Object.assign(this.frameInput, i);
+  }
+  /** Play a named behaviour now (e.g. "wave"), even while listening. */
+  playGesture(name) {
+    return this.behaviours ? this.behaviours.trigger(name, !0) : !1;
   }
   setPointer(i, s) {
     (this.pointerNdc.set(i, s), this.stage.setPointer(i, s));

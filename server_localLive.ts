@@ -713,7 +713,7 @@ function clock(): string {
 }
 
 function isInternalPrompt(text: string): boolean {
-  return /OUTPUT CONTRACT|INTERNAL SIYA EVENT|private runtime|private proactive|visual-awareness/i.test(text);
+  return /OUTPUT CONTRACT|INTERNAL SIYA EVENT|INTERNAL COGNITIVE TURN|private runtime|private proactive|visual-awareness/i.test(text);
 }
 
 function imagePart(frame: { data: string; mimeType: string }): Record<string, unknown> {

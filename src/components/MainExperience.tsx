@@ -531,6 +531,8 @@ export function MainExperience() {
       }
     },
     rn = L.useRef(null),
+    // Greeting on starting a voice conversation, at most every 30 minutes.
+    greetRef = L.useRef({ pending: !1, last: 0 }),
     [cr, Te] = L.useState(null);
   L.useEffect(() => {
     fetch("/api/memories")
@@ -655,7 +657,8 @@ export function MainExperience() {
       (vt(null),
         rn.current &&
           (a === "disconnected"
-            ? await rn.current.connect()
+            ? (Date.now() - greetRef.current.last > 30 * 60 * 1e3 && (greetRef.current.pending = !0),
+              await rn.current.connect())
             : rn.current.disconnect()));
     },
     ea = async (it) => {
@@ -670,6 +673,14 @@ export function MainExperience() {
         a === "disconnected" && (await gt.connect(!1)));
     };
   ta.current = Wa;
+  // Once the voice conversation is up: SIYA waves and greets for the time of day.
+  L.useEffect(() => {
+    if (a !== "listening" || !greetRef.current.pending || !rn.current) return;
+    greetRef.current.pending = !1;
+    greetRef.current.last = Date.now();
+    window.dispatchEvent(new CustomEvent("siya:gesture", { detail: { name: "wave" } }));
+    rn.current.requestGreeting();
+  }, [a]);
   const fr = () => {
     switch (Nt) {
       case "violet":

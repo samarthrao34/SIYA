@@ -107,6 +107,13 @@ export class LiveSession {
   getState() {
     return this.currentState;
   }
+  /** Ask the server for a time-aware greeting; waits until the live model is connected. */
+  requestGreeting() {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN && this.liveReady) {
+      this.ws.send(JSON.stringify({ type: "greet" }));
+      this.pendingGreeting = !1;
+    } else this.pendingGreeting = !0;
+  }
   sendVideoFrame(i, s = {}) {
     this.ws &&
       this.ws.readyState === WebSocket.OPEN &&
@@ -328,6 +335,7 @@ export class LiveSession {
                   r.status === "connecting_gemini" ||
                     (r.status === "connected"
                       ? ((this.liveReady = !0),
+                        this.pendingGreeting && this.requestGreeting(),
                         clearTimeout(this.connectTimer),
                         (this.reconnectAttempts = 0),
                         this.setState("listening"),

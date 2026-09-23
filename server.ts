@@ -3612,6 +3612,30 @@ async function startServer() {
                 throw error;
               }
             }
+          } else if (msg.type === "greet") {
+            // The user just tapped the mic. A private turn (never stored as
+            // user speech) asks SIYA to greet them for the local time of day.
+            const now = new Date();
+            const hour = now.getHours();
+            const partOfDay = hour < 5 ? "very late at night, after midnight"
+              : hour < 12 ? "morning"
+              : hour < 17 ? "afternoon"
+              : hour < 21 ? "evening"
+              : "night";
+            const clock = now.toLocaleString("en-IN", { weekday: "long", hour: "numeric", minute: "2-digit" });
+            session.sendClientContent({
+              turns: [{
+                role: "user",
+                parts: [{
+                  text: [
+                    "[SIYA INTERNAL COGNITIVE TURN] Private context, not something the user said. Never mention or quote it.",
+                    `The user just tapped the mic to start talking with you. It is ${clock} (${partOfDay}).`,
+                    "Greet them warmly in ONE short, natural Hinglish line that fits the time of day -- a gentle good morning, good afternoon or good evening, or, if it is very late, a soft caring note that they are still awake. Use their name if you know it. You are waving at them as you say it. Then stop and let them talk.",
+                  ].join("\n"),
+                }],
+              }],
+              turnComplete: true,
+            });
           } else if (msg.type === "toolResponse") {
             session.sendToolResponse({
               functionResponses: [

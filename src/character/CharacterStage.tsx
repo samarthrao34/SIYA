@@ -84,6 +84,9 @@ export const CharacterViewport = ({
     y.current = ot;
     // Debug handle for visual checks of the avatar (e.g. gesture tuning).
     (window as any).__siyaEngine = ot;
+    // Other parts of the app ask for gestures with a "siya:gesture" event.
+    const onGesture = (e: Event) => ot.playGesture((e as CustomEvent).detail?.name);
+    window.addEventListener("siya:gesture", onGesture);
     ot.resize(k.clientWidth, k.clientHeight);
     ot.load()
       .then(() => {
@@ -133,6 +136,7 @@ export const CharacterViewport = ({
           U.removeEventListener("pointermove", pointerMove),
           U.removeEventListener("pointerup", pointerUp),
           U.removeEventListener("pointercancel", pointerUp),
+          window.removeEventListener("siya:gesture", onGesture),
           (y.current = null),
           ot.dispose(),
           U.remove(),
