@@ -65,7 +65,11 @@ export function PrivacyCenter() {
                 SIYA's memories of you, your moods, goals and health readings are stored only on this computer
                 {encrypted ? ", encrypted." : "."}
               </li>
-              <li>Your voice and messages go to Google's Gemini service so SIYA can reply. Camera and screen images are sent only while you turn them on.</li>
+              <li>
+                Your voice and messages go to Google's Gemini service so SIYA can reply. Camera and screen images are sent only
+                while you turn them on. SIYA currently uses Gemini's free tier, so Google may use these conversations to improve
+                its products.
+              </li>
               <li>SIYA is a wellness companion, not a therapist, doctor or medical device.</li>
               <li>
                 In crisis: <b className="text-white">Tele-MANAS 14416</b> · <b className="text-white">KIRAN 1800-599-0019</b> (free, 24x7) ·{" "}

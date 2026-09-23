@@ -9,7 +9,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { HeartHandshake, Lock, Cloud, Trash2, Phone, LoaderCircle } from "lucide-react";
 
-const CONSENT_VERSION = 1;
+const CONSENT_VERSION = 2; // 2: disclose free-tier Gemini data use
 
 /** Whether the backend really encrypts personal data (it needs the OS keyring). */
 export function useEncryptionStatus(): boolean {
@@ -103,7 +103,8 @@ export function ConsentGate({ children }: { children: ReactNode }) {
             </Item>
             <Item icon={<Cloud className="h-4 w-4 text-cyan-300" />} title="What is sent to Google">
               To reply, your voice and messages are sent to Google's Gemini service. Camera and screen images are sent
-              only while you turn them on.
+              only while you turn them on. SIYA currently uses Gemini's free tier, so Google may use these
+              conversations to improve its products. Please avoid sharing details you would not want a company to see.
             </Item>
             <Item icon={<Trash2 className="h-4 w-4 text-amber-300" />} title="You are in control">
               You can delete everything SIYA knows about you at any time from the shield button in the corner.
