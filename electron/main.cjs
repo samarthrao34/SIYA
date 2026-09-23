@@ -22,7 +22,7 @@ const crypto = require('crypto');
 // Electron only uses the OS keyring on GNOME/KDE; under other Linux desktops
 // (e.g. Hyprland) it silently falls back to a hard-coded key. Ask for the
 // Secret Service (gnome-keyring) explicitly so the data key is truly sealed.
-if (process.platform === 'linux') app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
+if (process.platform === 'linux') app.commandLine?.appendSwitch('password-store', 'gnome-libsecret');
 const path = require('path');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
