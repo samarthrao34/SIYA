@@ -1061,15 +1061,45 @@ export function MainExperience() {
         children: [
           b.jsxs("form", {
             onSubmit: ea,
-            style: { maxWidth: "340px", order: 3 },
+            style: { maxWidth: "380px", order: 3 },
             className:
-              "mb-1 flex w-full items-center gap-2 rounded-full border border-white/15 bg-[#2b2140]/45 py-1 pl-4 pr-1 shadow-[0_8px_30px_rgba(20,10,30,0.35)] backdrop-blur-md",
+              `mb-1 flex w-full items-center gap-2 rounded-full border py-1 pl-1 pr-1 shadow-[0_8px_30px_rgba(20,10,30,0.35)] backdrop-blur-md transition-colors duration-500 ${a === "listening" ? (st === "thinking" ? "border-amber-200/40 bg-[#2b2140]/45" : "border-rose-200/50 bg-[#3a2540]/50") : a === "speaking" ? "border-violet-200/50 bg-[#2f2548]/50" : "border-white/15 bg-[#2b2140]/45"}`,
             children: [
+              // Mic: starts/stops the voice conversation. Its colour and the
+              // placeholder show what SIYA is doing.
+              b.jsxs("button", {
+                type: "button",
+                onClick: Wa,
+                "aria-label": a === "disconnected" ? "Talk to SIYA by voice" : "Stop the voice conversation",
+                title: a === "disconnected" ? "Talk to SIYA by voice" : "Stop the voice conversation",
+                className: `relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition hover:brightness-110 active:scale-95 cursor-pointer ${a === "speaking" ? "bg-gradient-to-br from-violet-100 to-fuchsia-200 text-violet-900" : a === "listening" && st === "thinking" ? "bg-gradient-to-br from-amber-50 to-orange-200 text-amber-900" : "bg-gradient-to-br from-orange-100 to-rose-300 text-rose-900"}`,
+                children: [
+                  a === "listening" && st !== "thinking" &&
+                    b.jsx("span", { className: "absolute inset-0 rounded-full bg-rose-200/60 animate-ping" }),
+                  a === "connecting"
+                    ? b.jsx("span", {
+                        className:
+                          "relative w-3.5 h-3.5 border-2 border-rose-900 border-t-transparent rounded-full animate-spin",
+                      })
+                    : a === "speaking"
+                      ? b.jsx(iy, { size: 16, className: "relative" })
+                      : b.jsx($g, { size: 16, className: "relative" }),
+                ],
+              }),
               b.jsx("input", {
                 value: I,
                 onChange: (it) => at(it.target.value),
                 "aria-label": "Message SIYA",
-                placeholder: "Type a message to SIYA...",
+                placeholder:
+                  a === "connecting"
+                    ? "Connecting…"
+                    : a === "speaking"
+                      ? "SIYA is speaking…"
+                      : a === "listening"
+                        ? st === "thinking"
+                          ? "SIYA is thinking…"
+                          : "Listening… tap the mic to stop"
+                        : "Message SIYA, or tap the mic to talk",
                 className:
                   "min-w-0 flex-1 bg-transparent py-1 text-sm text-white outline-none placeholder:text-white/45",
               }),
@@ -1077,8 +1107,7 @@ export function MainExperience() {
                 type: "submit",
                 "aria-label": "Send message",
                 disabled: !I.trim() || a === "connecting",
-                className:
-                  "flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-orange-100 to-rose-300 text-rose-900 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-35",
+                className: `flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition disabled:cursor-not-allowed ${I.trim() ? "bg-gradient-to-br from-orange-100 to-rose-300 text-rose-900 hover:brightness-110" : "bg-white/10 text-white/40"}`,
                 children: b.jsx(MS, { size: 14 }),
               }),
             ],
@@ -1106,44 +1135,6 @@ export function MainExperience() {
           b.jsxs("div", {
             className: "flex w-full items-center justify-center relative",
             children: [
-              // Talk button: the same frosted plum glass as the message box, with a
-              // warm Dusk-palette mic badge whose colour follows the session state.
-              b.jsxs("button", {
-                onClick: Wa,
-                "aria-live": "polite",
-                style: { maxWidth: "340px" },
-                className: `flex h-12 w-full items-center justify-center gap-3 rounded-full border px-5 text-[15px] font-medium tracking-wide text-white/95 backdrop-blur-md transition-all duration-500 cursor-pointer active:scale-[0.98] shadow-[0_8px_30px_rgba(20,10,30,0.35)] ${a === "disconnected" ? "border-white/15 bg-[#2b2140]/45 hover:bg-[#2b2140]/60 hover:border-orange-200/40" : a === "listening" ? (st === "thinking" ? "border-amber-200/40 bg-amber-100/10" : "border-rose-200/50 bg-rose-200/15 shadow-[0_0_28px_rgba(253,186,170,0.35)]") : a === "speaking" ? "border-violet-200/50 bg-violet-300/15 shadow-[0_0_28px_rgba(221,190,255,0.35)]" : "border-white/15 bg-[#2b2140]/45 text-white/80"}`,
-                title: a === "disconnected" ? "Start talking to SIYA" : "Stop the conversation",
-                children: [
-                  b.jsxs("span", {
-                    className: `relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${a === "speaking" ? "bg-gradient-to-br from-violet-100 to-fuchsia-200 text-violet-900" : a === "listening" && st === "thinking" ? "bg-gradient-to-br from-amber-50 to-orange-200 text-amber-900" : "bg-gradient-to-br from-orange-100 to-rose-300 text-rose-900"}`,
-                    children: [
-                      a === "listening" && st !== "thinking" &&
-                        b.jsx("span", { className: "absolute inset-0 rounded-full bg-rose-200/60 animate-ping" }),
-                      a === "connecting"
-                        ? b.jsx("span", {
-                            className:
-                              "relative w-3.5 h-3.5 border-2 border-rose-900 border-t-transparent rounded-full animate-spin",
-                          })
-                        : a === "speaking"
-                          ? b.jsx(iy, { size: 16, className: "relative" })
-                          : b.jsx($g, { size: 16, className: "relative" }),
-                    ],
-                  }),
-                  b.jsx("span", {
-                    children:
-                      a === "disconnected"
-                        ? "Tap to talk to SIYA"
-                        : a === "connecting"
-                          ? "Connecting…"
-                          : a === "speaking"
-                            ? "SIYA is speaking…"
-                            : st === "thinking"
-                              ? "SIYA is thinking…"
-                              : "Listening… tap to stop",
-                  }),
-                ],
-              }),
               wt &&
                 b.jsx("button", {
                   onClick: () => {
