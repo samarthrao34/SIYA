@@ -716,7 +716,7 @@ export function MainExperience() {
       // Soft glow behind SIYA so it is obvious whether she is listening or speaking.
       b.jsx("div", {
         "aria-hidden": !0,
-        className: `pointer-events-none absolute left-1/2 top-[42%] z-0 h-[70vh] w-[70vh] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[90px] transition-all duration-700 ${a === "speaking" ? "bg-fuchsia-400/25 scale-105 opacity-100" : a === "listening" ? (st === "thinking" ? "bg-amber-300/15 opacity-100" : "bg-teal-300/20 opacity-100 animate-pulse") : "opacity-0 scale-90"}`,
+        className: `pointer-events-none absolute left-1/2 top-[42%] z-0 h-[70vh] w-[70vh] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[90px] transition-all duration-700 ${a === "speaking" ? "bg-violet-300/20 scale-105 opacity-100" : a === "listening" ? (st === "thinking" ? "bg-amber-200/15 opacity-100" : "bg-rose-200/20 opacity-100 animate-pulse") : "opacity-0 scale-90"}`,
       }),
       b.jsx("div", {
         className: "absolute inset-0 z-0 pointer-events-auto select-none",
@@ -1063,7 +1063,7 @@ export function MainExperience() {
             onSubmit: ea,
             style: { maxWidth: "340px", order: 3 },
             className:
-              "mb-1 flex w-full items-center gap-2 rounded-full border border-white/15 bg-black/45 py-1 pl-4 pr-1 shadow-lg backdrop-blur-md",
+              "mb-1 flex w-full items-center gap-2 rounded-full border border-white/15 bg-[#2b2140]/45 py-1 pl-4 pr-1 shadow-[0_8px_30px_rgba(20,10,30,0.35)] backdrop-blur-md",
             children: [
               b.jsx("input", {
                 value: I,
@@ -1078,7 +1078,7 @@ export function MainExperience() {
                 "aria-label": "Send message",
                 disabled: !I.trim() || a === "connecting",
                 className:
-                  "flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/40 transition hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-35",
+                  "flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-orange-100 to-rose-300 text-rose-900 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-35",
                 children: b.jsx(MS, { size: 14 }),
               }),
             ],
@@ -1104,22 +1104,32 @@ export function MainExperience() {
             }),
           }),
           b.jsxs("div", {
-            className: "flex items-center justify-center relative",
+            className: "flex w-full items-center justify-center relative",
             children: [
+              // Talk button: the same frosted plum glass as the message box, with a
+              // warm Dusk-palette mic badge whose colour follows the session state.
               b.jsxs("button", {
                 onClick: Wa,
                 "aria-live": "polite",
-                className: `flex h-12 items-center gap-2.5 rounded-full border px-6 text-sm font-medium tracking-wide backdrop-blur-md transition-all duration-500 cursor-pointer active:scale-95 ${a === "disconnected" ? "border-white/20 bg-gradient-to-r from-indigo-500/70 to-fuchsia-500/60 text-white shadow-[0_0_30px_rgba(217,70,239,0.35)] hover:scale-[1.03] hover:shadow-[0_0_40px_rgba(217,70,239,0.5)]" : a === "listening" ? (st === "thinking" ? "border-amber-200/50 bg-amber-400/15 text-amber-50 shadow-[0_0_30px_rgba(251,191,36,0.25)]" : "border-teal-300/70 bg-teal-500/15 text-teal-50 shadow-[0_0_35px_rgba(45,212,191,0.35)]") : a === "speaking" ? "border-fuchsia-300/70 bg-fuchsia-500/25 text-white shadow-[0_0_35px_rgba(217,70,239,0.4)]" : "border-white/20 bg-white/10 text-white/80"}`,
+                style: { maxWidth: "340px" },
+                className: `flex h-12 w-full items-center justify-center gap-3 rounded-full border px-5 text-[15px] font-medium tracking-wide text-white/95 backdrop-blur-md transition-all duration-500 cursor-pointer active:scale-[0.98] shadow-[0_8px_30px_rgba(20,10,30,0.35)] ${a === "disconnected" ? "border-white/15 bg-[#2b2140]/45 hover:bg-[#2b2140]/60 hover:border-orange-200/40" : a === "listening" ? (st === "thinking" ? "border-amber-200/40 bg-amber-100/10" : "border-rose-200/50 bg-rose-200/15 shadow-[0_0_28px_rgba(253,186,170,0.35)]") : a === "speaking" ? "border-violet-200/50 bg-violet-300/15 shadow-[0_0_28px_rgba(221,190,255,0.35)]" : "border-white/15 bg-[#2b2140]/45 text-white/80"}`,
                 title: a === "disconnected" ? "Start talking to SIYA" : "Stop the conversation",
                 children: [
-                  a === "connecting"
-                    ? b.jsx("div", {
-                        className:
-                          "w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin",
-                      })
-                    : a === "speaking"
-                      ? b.jsx(iy, { size: 18 })
-                      : b.jsx($g, { size: 18, className: a === "listening" && st !== "thinking" ? "animate-pulse" : "" }),
+                  b.jsxs("span", {
+                    className: `relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${a === "speaking" ? "bg-gradient-to-br from-violet-100 to-fuchsia-200 text-violet-900" : a === "listening" && st === "thinking" ? "bg-gradient-to-br from-amber-50 to-orange-200 text-amber-900" : "bg-gradient-to-br from-orange-100 to-rose-300 text-rose-900"}`,
+                    children: [
+                      a === "listening" && st !== "thinking" &&
+                        b.jsx("span", { className: "absolute inset-0 rounded-full bg-rose-200/60 animate-ping" }),
+                      a === "connecting"
+                        ? b.jsx("span", {
+                            className:
+                              "relative w-3.5 h-3.5 border-2 border-rose-900 border-t-transparent rounded-full animate-spin",
+                          })
+                        : a === "speaking"
+                          ? b.jsx(iy, { size: 16, className: "relative" })
+                          : b.jsx($g, { size: 16, className: "relative" }),
+                    ],
+                  }),
                   b.jsx("span", {
                     children:
                       a === "disconnected"
