@@ -708,6 +708,11 @@ export function MainExperience() {
         className:
           "absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.012)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.012)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none opacity-40",
       }),
+      // Soft glow behind SIYA so it is obvious whether she is listening or speaking.
+      b.jsx("div", {
+        "aria-hidden": !0,
+        className: `pointer-events-none absolute left-1/2 top-[42%] z-0 h-[70vh] w-[70vh] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[90px] transition-all duration-700 ${a === "speaking" ? "bg-fuchsia-400/25 scale-105 opacity-100" : a === "listening" ? (st === "thinking" ? "bg-amber-300/15 opacity-100" : "bg-teal-300/20 opacity-100 animate-pulse") : "opacity-0 scale-90"}`,
+      }),
       b.jsx("div", {
         className: "absolute inset-0 z-0 pointer-events-auto select-none",
         children: b.jsx(CharacterStage, {
@@ -744,25 +749,25 @@ export function MainExperience() {
               b.jsxs("button", {
                 onClick: () => ct(!nt),
                 className:
-                  "flex items-center gap-1 opacity-60 hover:opacity-100 text-white transition text-[10px] font-medium tracking-wider cursor-pointer",
+                  "flex items-center gap-1 opacity-60 hover:opacity-100 text-white transition text-[13px] font-medium tracking-normal cursor-pointer",
                 title: "Sway Themes and Info",
                 children: [
                   b.jsx(gp, { size: 13 }),
                   b.jsx("span", {
                     className: "hidden sm:inline",
-                    children: "TOPICS",
+                    children: "Themes",
                   }),
                 ],
               }),
               b.jsxs("button", {
                 onClick: () => setHealthOpen(!healthOpen),
-                className: `flex items-center gap-1 transition text-[10px] font-medium tracking-wider cursor-pointer ${healthOpen ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
+                className: `flex items-center gap-1 transition text-[13px] font-medium tracking-normal cursor-pointer ${healthOpen ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
                 title: "Health Data Dashboard",
                 children: [
                   b.jsx(hp, { size: 13 }),
                   b.jsx("span", {
                     className: "hidden sm:inline",
-                    children: "DATA",
+                    children: "Health",
                   }),
                   healthSyncStatus &&
                     healthSyncStatus.status === "checking" &&
@@ -789,26 +794,26 @@ export function MainExperience() {
               b.jsxs("button", {
                 onClick: () => De(!Re),
                 className:
-                  "flex items-center gap-1 opacity-60 hover:opacity-100 text-white transition text-[10px] font-medium tracking-wider cursor-pointer",
+                  "flex items-center gap-1 opacity-60 hover:opacity-100 text-white transition text-[13px] font-medium tracking-normal cursor-pointer",
                 title: "Recollections Database",
                 children: [
                   b.jsx(Vo, { size: 13 }),
                   b.jsx("span", {
                     className: "hidden sm:inline",
-                    children: "RECALLS",
+                    children: "Memories",
                   }),
                 ],
               }),
               b.jsxs("button", {
                 onClick: s ? W : U,
-                className: `flex items-center gap-1 transition text-[10px] font-medium tracking-wider cursor-pointer ${s ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
+                className: `flex items-center gap-1 transition text-[13px] font-medium tracking-normal cursor-pointer ${s ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
                 title: "Share Screen with Siya",
                 children: [
                   b.jsx(mS, {
                     size: 13,
                     className: s && !r ? "animate-pulse text-cyan-400" : "",
                   }),
-                  b.jsx("span", { children: s ? "SHARING" : "SHARE SCREEN" }),
+                  b.jsx("span", { children: s ? "Sharing" : "Share screen" }),
                   g === "capturing" &&
                     b.jsx("span", {
                       className:
@@ -831,14 +836,14 @@ export function MainExperience() {
               }),
               b.jsxs("button", {
                 onClick: camOn ? stopCamera : startCamera,
-                className: `flex items-center gap-1 transition text-[10px] font-medium tracking-wider cursor-pointer ${camOn ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
+                className: `flex items-center gap-1 transition text-[13px] font-medium tracking-normal cursor-pointer ${camOn ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
                 title: "Let Siya see you through your camera",
                 children: [
                   b.jsx(cS, {
                     size: 13,
                     className: camOn ? "animate-pulse text-cyan-400" : "",
                   }),
-                  b.jsx("span", { children: camOn ? "CAMERA ON" : "CAMERA" }),
+                  b.jsx("span", { children: camOn ? "Camera on" : "Camera" }),
                   camOn && detectedEmotion && detectedEmotion.emotion !== "neutral" &&
                     b.jsx("span", {
                       className: "opacity-70 lowercase",
@@ -849,14 +854,14 @@ export function MainExperience() {
               }),
               b.jsxs("button", {
                 onClick: () => Pn(!ke),
-                className: `flex items-center gap-1 transition text-[10px] font-medium tracking-wider cursor-pointer ${ke ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
+                className: `flex items-center gap-1 transition text-[13px] font-medium tracking-normal cursor-pointer ${ke ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
                 title: "Siya Configuration",
                 children: [
                   b.jsx(ey, {
                     size: 13,
                     className: ke ? "animate-spin [animation-duration:6s]" : "",
                   }),
-                  b.jsx("span", { children: "SETTINGS" }),
+                  b.jsx("span", { children: "Settings" }),
                 ],
               }),
             ],
@@ -1096,21 +1101,33 @@ export function MainExperience() {
           b.jsxs("div", {
             className: "flex items-center justify-center relative",
             children: [
-              b.jsx("button", {
+              b.jsxs("button", {
                 onClick: Wa,
-                className: `w-11 h-11 rounded-full flex items-center justify-center transition-all duration-500 cursor-pointer ${a === "disconnected" ? "bg-white/10 hover:bg-white/15 border border-white/15 text-white shadow-[0_0_20px_rgba(255,255,255,0.02)] hover:scale-105 active:scale-95" : a === "listening" ? "bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/80 text-cyan-200 shadow-[0_0_35px_rgba(34,211,238,0.3)] animate-pulse scale-105" : a === "speaking" ? "bg-purple-500/90 hover:bg-purple-600 border border-purple-400/95 text-white shadow-[0_0_35px_rgba(168,85,247,0.4)] scale-105" : "bg-amber-600 border border-amber-300 text-white animate-spin"}`,
-                title: a === "disconnected" ? "Awake Siya" : "Sleep core",
-                children:
-                  a === "disconnected"
-                    ? b.jsx(ty, { className: "opacity-80", size: 18 })
-                    : a === "connecting"
-                      ? b.jsx("div", {
-                          className:
-                            "w-2.5 h-2.5 border-2 border-white border-t-transparent rounded-full animate-spin",
-                        })
-                      : a === "listening"
-                        ? b.jsx($g, { size: 18, className: "text-cyan-200" })
-                        : b.jsx(iy, { size: 18, className: "text-white" }),
+                "aria-live": "polite",
+                className: `flex h-12 items-center gap-2.5 rounded-full border px-6 text-sm font-medium tracking-wide backdrop-blur-md transition-all duration-500 cursor-pointer active:scale-95 ${a === "disconnected" ? "border-white/20 bg-gradient-to-r from-indigo-500/70 to-fuchsia-500/60 text-white shadow-[0_0_30px_rgba(217,70,239,0.35)] hover:scale-[1.03] hover:shadow-[0_0_40px_rgba(217,70,239,0.5)]" : a === "listening" ? (st === "thinking" ? "border-amber-200/50 bg-amber-400/15 text-amber-50 shadow-[0_0_30px_rgba(251,191,36,0.25)]" : "border-teal-300/70 bg-teal-500/15 text-teal-50 shadow-[0_0_35px_rgba(45,212,191,0.35)]") : a === "speaking" ? "border-fuchsia-300/70 bg-fuchsia-500/25 text-white shadow-[0_0_35px_rgba(217,70,239,0.4)]" : "border-white/20 bg-white/10 text-white/80"}`,
+                title: a === "disconnected" ? "Start talking to SIYA" : "Stop the conversation",
+                children: [
+                  a === "connecting"
+                    ? b.jsx("div", {
+                        className:
+                          "w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin",
+                      })
+                    : a === "speaking"
+                      ? b.jsx(iy, { size: 18 })
+                      : b.jsx($g, { size: 18, className: a === "listening" && st !== "thinking" ? "animate-pulse" : "" }),
+                  b.jsx("span", {
+                    children:
+                      a === "disconnected"
+                        ? "Tap to talk to SIYA"
+                        : a === "connecting"
+                          ? "Connecting…"
+                          : a === "speaking"
+                            ? "SIYA is speaking…"
+                            : st === "thinking"
+                              ? "SIYA is thinking…"
+                              : "Listening… tap to stop",
+                  }),
+                ],
               }),
               wt &&
                 b.jsx("button", {
