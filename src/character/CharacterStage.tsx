@@ -82,6 +82,8 @@ export const CharacterViewport = ({
         },
       });
     y.current = ot;
+    // Debug handle for visual checks of the avatar (e.g. gesture tuning).
+    (window as any).__siyaEngine = ot;
     ot.resize(k.clientWidth, k.clientHeight);
     ot.load()
       .then(() => {

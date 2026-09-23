@@ -2737,6 +2737,9 @@ export const g2 = ["idle", "listening", "thinking", "talking"],
     "embarrassed",
     "playful",
   ];
+function eulerQuat(x, y, z) {
+  return new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z, "XYZ"));
+}
 export class y2 {
   constructor() {
     ((this.time = 0),
@@ -2790,13 +2793,26 @@ export class y2 {
   applyThinking(i, s, o) {
     if (i <= 0.001) return;
     const r = 0.94 + Math.sin(this.time * 0.7) * 0.025;
+    // A character config may supply its own hand-to-chin pose
+    // (config.gesturePoses.thinking); rotations are bone-local, so they depend
+    // on the model's rest pose.
+    const tp = this.poses && this.poses.thinking,
+      arm = tp ? tp.armR : [0.05, -0.28, -0.3],
+      elbow = tp ? tp.elbowR : [0.1, 0.18, 2.35],
+      wrist = tp ? tp.wristR : [0.12, -0.16, -0.22];
     (s.addEuler(o.head, -0.045, 0.11, -0.065, i),
       s.addEuler(o.neck, -0.015, 0.035, -0.018, i),
       s.addEuler(o.upperBody2, 0.018, 0.035, 0, i),
       s.addEuler(o.shoulderR, 0, 0, -0.055, i),
-      s.addEuler(o.armR, 0.05, -0.28, -0.3 * r, i),
-      s.addEuler(o.elbowR, 0.1, 0.18, 2.35, i),
-      s.addEuler(o.wristR, 0.12, -0.16, -0.22, i),
+      // Custom poses blend along the shortest rotation (slerp): scaling large
+      // Euler angles by the blend weight swings the arm behind the body first.
+      tp
+        ? (s.addQuaternion(o.armR, eulerQuat(arm[0], arm[1], arm[2] * r), i),
+          s.addQuaternion(o.elbowR, eulerQuat(elbow[0], elbow[1], elbow[2]), i),
+          s.addQuaternion(o.wristR, eulerQuat(wrist[0], wrist[1], wrist[2]), i))
+        : (s.addEuler(o.armR, arm[0], arm[1], arm[2] * r, i),
+          s.addEuler(o.elbowR, elbow[0], elbow[1], elbow[2], i),
+          s.addEuler(o.wristR, wrist[0], wrist[1], wrist[2], i)),
       fe(s, o, "right", "point", i * 0.95));
   }
   applyTalking(i, s, o) {
@@ -3833,6 +3849,7 @@ export class CharacterEngine {
         (this.face = new r2(this.morphs, this.config.morphs, this.config.idle)),
         (this.idle = new d2(this.config.bones, this.config.idle)),
         (this.performance = new y2()),
+        (this.performance.poses = this.config.gesturePoses ?? null),
         (this.kimodoMotion = new KimodoMotionSource()),
         (this.gaze = new m2(h, this.config.bones, this.config.idle)),
         (this.behaviours = new kh(this.config.behaviour)),

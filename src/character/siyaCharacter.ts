@@ -70,6 +70,16 @@ export const SIYA_CHARACTER = {
     hair: { ...evelyn.materialTuning.hair, alphaTest: 0.5 },
   },
   hiddenMaterials: [],
+  // Evelyn's thinking pose (hand to chin) folds a T-pose-rest arm up behind
+  // the head. These were solved numerically so the right hand rests just in
+  // front of the chin with the elbow in front of the body.
+  gesturePoses: {
+    thinking: {
+      armR: [-1.268, -0.269, 0.436],
+      elbowR: [-0.382, -2.419, 0.551],
+      wristR: [0.12, -0.16, -0.22],
+    },
+  },
   physics: {
     ...evelyn.physics,
     groups: {
