@@ -9,6 +9,7 @@ import { InitiativeEngine } from "./initiativeEngine";
 import { SituationModel } from "./situationModel";
 import { SkillManager } from "./skillManager";
 import { StructuredMemoryStore, type LegacyMemoryLike } from "./structuredMemory";
+import { encryptText } from "../server_secureStore";
 import type {
   AttentionAssessment,
   CognitiveEvent,
@@ -304,7 +305,7 @@ export class CognitiveRuntime {
       situation: { ...this.situation.getSnapshot(), pendingRisk: null },
       unfinishedGoals: this.goals.list().filter((goal) => ["active", "blocked", "pending"].includes(goal.status)),
     };
-    await fs.writeFile(temp, JSON.stringify(payload, null, 2), "utf-8");
+    await fs.writeFile(temp, encryptText(JSON.stringify(payload, null, 2)), "utf-8");
     await fs.rename(temp, target);
   }
 

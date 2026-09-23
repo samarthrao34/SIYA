@@ -2,6 +2,7 @@ import fs from "fs/promises";
 import { GoogleGenAI, Type } from "@google/genai";
 import { Memory, MemoryTransaction } from "./src/lib/memoryTypes";
 import { dataFile } from "./server_paths";
+import { decryptText, encryptText } from "./server_secureStore";
 
 const MEMORY_FILE = dataFile("memories.json");
 
@@ -9,8 +10,10 @@ const MEMORY_FILE = dataFile("memories.json");
 export async function loadMemories(): Promise<Memory[]> {
   try {
     const data = await fs.readFile(MEMORY_FILE, "utf-8");
-    return JSON.parse(data) as Memory[];
+    return JSON.parse(decryptText(data)) as Memory[];
   } catch (error: any) {
+    // Returning [] here would let the next save overwrite the encrypted file.
+    if (error.code === "SIYA_NO_DATA_KEY") throw error;
     // If file doesn't exist, return empty array
     if (error.code === "ENOENT") {
       return [];
@@ -22,7 +25,7 @@ export async function loadMemories(): Promise<Memory[]> {
 
 export async function saveMemories(memories: Memory[]): Promise<void> {
   try {
-    await fs.writeFile(MEMORY_FILE, JSON.stringify(memories, null, 2), "utf-8");
+    await fs.writeFile(MEMORY_FILE, encryptText(JSON.stringify(memories, null, 2)), "utf-8");
     console.log(`[Memory] Saved ${memories.length} memories successfully.`);
   } catch (error) {
     console.error("[Memory] Error writing memory file:", error);
@@ -48,7 +51,7 @@ export function formatSystemInstructionsWithMemories(baseInstruction: string, me
   let memoryBlock = 
     "\n\n" +
     "=== SIYA PERSISTENT CONTEXT ===\n" +
-    "These are user-provided facts retained for continuity. Use a fact only when it is directly relevant to the current exchange. Never mention databases, memory files, or retrieval. Never force a reference, claim friendship or emotional attachment, or ask for more personal details merely to seem connected.\n\n" +
+    "These are user-provided facts retained for continuity. Bring a fact back naturally when it matters -- especially how they were feeling and what was worrying them last time, so you can gently follow up. Never mention databases, memory files, or retrieval, never force a reference, and never interrogate them for personal details.\n\n" +
     "RELEVANT KNOWLEDGE CARD:\n";
 
   const categoriesOrdered = [

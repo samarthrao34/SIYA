@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { MemoryKind, MemoryQuery, StructuredMemory } from "./types";
+import { decryptText, encryptText } from "../server_secureStore";
 
 interface MemoryFile {
   version: 1;
@@ -41,9 +42,10 @@ export class StructuredMemoryStore {
     if (this.loaded) return;
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     try {
-      const parsed = JSON.parse(await fs.readFile(this.filePath, "utf-8")) as MemoryFile;
+      const parsed = JSON.parse(decryptText(await fs.readFile(this.filePath, "utf-8"))) as MemoryFile;
       this.memories = Array.isArray(parsed.memories) ? parsed.memories : [];
     } catch (error: any) {
+      if (error?.code === "SIYA_NO_DATA_KEY") throw error; // encrypted, not corrupt
       if (error?.code !== "ENOENT") {
         const backup = `${this.filePath}.corrupt-${Date.now()}`;
         await fs.rename(this.filePath, backup).catch(() => {});
@@ -237,11 +239,24 @@ export class StructuredMemoryStore {
     return this.memories.map((item) => structuredClone(item));
   }
 
+  /** Re-save through the (encrypting) write path, e.g. to encrypt old plain files. */
+  async persistNow(): Promise<void> {
+    this.assertLoaded();
+    await this.persist();
+  }
+
+  /** "Delete all my data": drop every memory, in RAM and on disk. */
+  async forgetAll(): Promise<void> {
+    this.assertLoaded();
+    this.memories = [];
+    await this.persist();
+  }
+
   private async persist(): Promise<void> {
     const payload: MemoryFile = { version: 1, memories: this.memories };
     this.writeQueue = this.writeQueue.then(async () => {
       const temp = `${this.filePath}.${process.pid}.tmp`;
-      await fs.writeFile(temp, JSON.stringify(payload, null, 2), "utf-8");
+      await fs.writeFile(temp, encryptText(JSON.stringify(payload, null, 2)), "utf-8");
       await fs.rename(temp, this.filePath);
     });
     await this.writeQueue;

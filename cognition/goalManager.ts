@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Goal, GoalTask } from "./types";
+import { decryptText, encryptText } from "../server_secureStore";
 
 interface GoalFile {
   version: 1;
@@ -28,9 +29,10 @@ export class GoalManager {
     if (this.loaded) return;
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
     try {
-      const parsed = JSON.parse(await fs.readFile(this.filePath, "utf-8")) as GoalFile;
+      const parsed = JSON.parse(decryptText(await fs.readFile(this.filePath, "utf-8"))) as GoalFile;
       this.goals = Array.isArray(parsed.goals) ? parsed.goals : [];
     } catch (error: any) {
+      if (error?.code === "SIYA_NO_DATA_KEY") throw error; // encrypted, not corrupt
       if (error?.code !== "ENOENT") {
         await fs.rename(this.filePath, `${this.filePath}.corrupt-${Date.now()}`).catch(() => {});
       }
@@ -188,11 +190,22 @@ export class GoalManager {
     return goal;
   }
 
+  /** Re-save through the (encrypting) write path, e.g. to encrypt old plain files. */
+  async persistNow(): Promise<void> {
+    await this.persist();
+  }
+
+  /** "Delete all my data": drop every goal, in RAM and on disk. */
+  async forgetAll(): Promise<void> {
+    this.goals = [];
+    await this.persist();
+  }
+
   private async persist(): Promise<void> {
     const payload: GoalFile = { version: 1, goals: this.goals };
     this.writeQueue = this.writeQueue.then(async () => {
       const temp = `${this.filePath}.${process.pid}.tmp`;
-      await fs.writeFile(temp, JSON.stringify(payload, null, 2), "utf-8");
+      await fs.writeFile(temp, encryptText(JSON.stringify(payload, null, 2)), "utf-8");
       await fs.rename(temp, this.filePath);
     });
     await this.writeQueue;

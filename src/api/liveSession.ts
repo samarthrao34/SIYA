@@ -335,6 +335,11 @@ export class LiveSession {
                       : r.status === "session_closed" && this.retryConnection()));
                 return;
               }
+              // Crisis-language safety net (server_safety.ts): SafetyCard.tsx shows the helplines.
+              if (r.type === 'safety') {
+                window.dispatchEvent(new CustomEvent('siya:safety', { detail: r }));
+                return;
+              }
               if (r.type === 'speechStart') {
                 this.beginAvatarSpeech(r.utteranceId);
                 return;

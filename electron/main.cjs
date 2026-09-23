@@ -16,7 +16,13 @@
 
 'use strict';
 
-const { app, BrowserWindow, Menu, shell, dialog, ipcMain, desktopCapturer, session, screen, Tray, nativeImage, Notification } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain, desktopCapturer, session, screen, Tray, nativeImage, Notification, safeStorage } = require('electron');
+const crypto = require('crypto');
+
+// Electron only uses the OS keyring on GNOME/KDE; under other Linux desktops
+// (e.g. Hyprland) it silently falls back to a hard-coded key. Ask for the
+// Secret Service (gnome-keyring) explicitly so the data key is truly sealed.
+if (process.platform === 'linux') app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
 const path = require('path');
 const http = require('http');
 const { spawn, execFile } = require('child_process');
@@ -117,6 +123,33 @@ if (!gotSingleInstanceLock) {
 // ---------------------------------------------------------------------------
 // Backend lifecycle
 // ---------------------------------------------------------------------------
+/**
+ * Per-install key for encrypting SIYA's personal data at rest (see
+ * server_secureStore.ts). The key itself is sealed with the OS keyring via
+ * safeStorage and stored as data-key.bin in userData; the backend only ever
+ * receives it in its environment. Losing this file makes the encrypted data
+ * unreadable, so it is never deleted by "delete all my data".
+ */
+function loadDataKey(dataDir) {
+  const keyFile = path.join(dataDir, 'data-key.bin');
+  try {
+    if (!safeStorage.isEncryptionAvailable()) {
+      console.warn('[SIYA] OS keyring unavailable; personal data stays unencrypted.');
+      return null;
+    }
+    if (fs.existsSync(keyFile)) {
+      return safeStorage.decryptString(fs.readFileSync(keyFile));
+    }
+    const key = crypto.randomBytes(32).toString('base64');
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(keyFile, safeStorage.encryptString(key), { mode: 0o600 });
+    return key;
+  } catch (error) {
+    console.error('[SIYA] Could not load the data encryption key:', error);
+    return null;
+  }
+}
+
 function startBackend() {
   if (!fs.existsSync(SERVER_ENTRY)) {
     throw new Error(
@@ -145,6 +178,8 @@ function startBackend() {
     SIYA_DATA_DIR: dataDir,
     SIYA_APP_ROOT: APP_ROOT,
   };
+  const dataKey = loadDataKey(dataDir);
+  if (dataKey) env.SIYA_DATA_KEY = dataKey;
   if (app.isPackaged) {
     // The desktop agent uses this exact executable for the per-user Windows
     // auto-start entry. It must never point at source scripts or Python.

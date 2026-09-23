@@ -15,6 +15,7 @@
  */
 import fs from "fs";
 import { dataFile } from "./server_paths";
+import { decryptText, encryptText } from "./server_secureStore";
 
 export interface HealthReading {
   /** ISO 8601 timestamp of when this reading was captured. */
@@ -27,10 +28,24 @@ const HEALTH_FILE = dataFile("health_history.jsonl");
 
 export function appendHealthReading(reading: HealthReading): void {
   try {
-    fs.appendFileSync(HEALTH_FILE, JSON.stringify(reading) + "\n", "utf-8");
+    fs.appendFileSync(HEALTH_FILE, encryptText(JSON.stringify(reading)) + "\n", "utf-8");
   } catch {
     /* best-effort, matches the rest of SIYA's local persistence */
   }
+}
+
+/** Rewrite the history so every line uses the current (encrypted) format. */
+export function reencryptHealthHistory(): void {
+  if (!fs.existsSync(HEALTH_FILE)) return;
+  const readings = loadAllHealthReadings();
+  const temp = `${HEALTH_FILE}.tmp`;
+  fs.writeFileSync(temp, readings.map((r) => encryptText(JSON.stringify(r)) + "\n").join(""), "utf-8");
+  fs.renameSync(temp, HEALTH_FILE);
+}
+
+/** "Delete all my data": remove every stored health reading. */
+export function deleteHealthHistory(): void {
+  fs.rmSync(HEALTH_FILE, { force: true });
 }
 
 export function loadAllHealthReadings(): HealthReading[] {
@@ -40,7 +55,7 @@ export function loadAllHealthReadings(): HealthReading[] {
     const out: HealthReading[] = [];
     for (const line of lines) {
       try {
-        const parsed = JSON.parse(line);
+        const parsed = JSON.parse(decryptText(line));
         if (parsed && typeof parsed.timestamp === "string") out.push(parsed);
       } catch {
         /* skip a corrupt line rather than fail the whole read */
