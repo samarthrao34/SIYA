@@ -160,7 +160,7 @@ export function MemoriesPanel({
                             className:
                               "font-display font-medium text-[10px] tracking-tight text-white flex items-center gap-1",
                             children: [
-                              "Siya Memory Core",
+                              "What SIYA remembers",
                               b.jsx(Qo, {
                                 size: 9,
                                 className: "text-cyan-400",
@@ -171,7 +171,7 @@ export function MemoriesPanel({
                             className:
                               "text-[7px] font-mono uppercase tracking-widest text-slate-400 mt-0.5",
                             children: [
-                              "Persistent recollect files (",
+                              "Memories (",
                               s.length,
                               ")",
                             ],
@@ -204,7 +204,7 @@ export function MemoriesPanel({
                         "flex items-center gap-1 px-1.5 py-0.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-[7px] font-mono tracking-wider text-cyan-300 transition shrink-0 cursor-pointer",
                       children: [
                         b.jsx(xS, { size: 8 }),
-                        b.jsx("span", { children: "MANUAL SEED" }),
+                        b.jsx("span", { children: "Add a memory" }),
                       ],
                     }),
                 ],
@@ -423,10 +423,10 @@ export function MemoriesPanel({
                         className:
                           "w-1 h-1 rounded-full bg-cyan-400 shadow-[0_0_5px_rgba(34,211,238,0.7)] animate-pulse",
                       }),
-                      b.jsx("span", { children: "MEM-SYNC STREAM ACTIVE" }),
+                      b.jsx("span", { children: "Up to date" }),
                     ],
                   }),
-                  b.jsx("span", { children: "DURABLE LOCAL JSON DB SEED" }),
+                  b.jsx("span", { children: "Saved on this device" }),
                 ],
               }),
             ],

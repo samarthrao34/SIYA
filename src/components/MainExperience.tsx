@@ -613,7 +613,7 @@ export function MainExperience() {
           Ot && te.includes(Ot)
             ? (B(Ot),
               Rt({
-                result: `Successfully shifted aesthetic atmosphere to ${Ot}.`,
+                result: `Theme changed to ${Ot}.`,
               }))
             : Rt({
                 error: `Unsupported color '${Ot}'. Supported themes are: ${te.join(", ")}`,
@@ -704,6 +704,8 @@ export function MainExperience() {
   };
   return b.jsx(MotionConfig, { skipAnimations: !$t.animations, children: b.jsxs("div", {
     id: "siya-holographic-desktop",
+    // Calm panel styling (index.css) for every theme; themes only change the backdrop.
+    "data-skin": "dusk",
     // "dusk" (default): a calm plum -> mauve -> warm peach evening sky instead
     // of the original near-black sci-fi backdrop.
     className: `relative w-full h-screen overflow-hidden ${Nt === "dusk" ? "bg-[linear-gradient(180deg,#1c1530_0%,#33264a_34%,#5c4063_66%,#9a6671_88%,#c48478_100%)]" : "bg-[#020205]"} text-white ${fr()} theme-transition flex flex-col justify-between p-6 sm:p-10 select-none`,
@@ -766,7 +768,7 @@ export function MainExperience() {
                 onClick: () => ct(!nt),
                 className:
                   "flex items-center gap-1 opacity-60 hover:opacity-100 text-white transition text-[13px] font-medium tracking-normal cursor-pointer",
-                title: "Sway Themes and Info",
+                title: "Themes",
                 children: [
                   b.jsx(gp, { size: 13 }),
                   b.jsx("span", {
@@ -871,7 +873,7 @@ export function MainExperience() {
               b.jsxs("button", {
                 onClick: () => Pn(!ke),
                 className: `flex items-center gap-1 transition text-[13px] font-medium tracking-normal cursor-pointer ${ke ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
-                title: "Siya Configuration",
+                title: "Settings",
                 children: [
                   b.jsx(ey, {
                     size: 13,
@@ -957,73 +959,67 @@ export function MainExperience() {
                   "mt-6 p-5 rounded-2xl border border-white/10 bg-slate-900/85 backdrop-blur-2xl max-w-md text-left w-full absolute z-40 shadow-2xl",
                 children: [
                   b.jsxs("div", {
-                    className:
-                      "flex items-center justify-between mb-3 text-white",
+                    className: "flex items-center justify-between mb-3 text-white",
                     children: [
                       b.jsxs("div", {
-                        className:
-                          "flex items-center gap-1.5 font-display text-sm font-bold tracking-wide",
-                        children: [
-                          b.jsx(gp, { size: 16, className: "text-indigo-400" }),
-                          b.jsx("span", {
-                            children: "PLAYFUL CORE SUGGESTIONS",
-                          }),
-                        ],
+                        className: "flex items-center gap-2 text-sm font-semibold",
+                        children: [b.jsx(gp, { size: 16, className: "text-orange-200" }), b.jsx("span", { children: "Themes" })],
                       }),
                       b.jsx("button", {
                         onClick: () => ct(!1),
-                        className: "text-slate-400 hover:text-white transition",
+                        className: "text-white/50 hover:text-white transition",
+                        "aria-label": "Close",
                         children: b.jsx(Is, { size: 14 }),
                       }),
                     ],
                   }),
-                  b.jsx("p", {
-                    className:
-                      "text-xs text-slate-400 mb-4 font-mono leading-relaxed",
-                    children:
-                      "Siya controls your real Windows apps and default PC browser. Here are useful triggers to try speaking aloud:",
-                  }),
-                  b.jsxs("div", {
-                    className:
-                      "space-y-2 text-xs font-serif italic text-indigo-300",
+                  // Theme swatches (the same themes SIYA can switch to by voice).
+                  b.jsx("div", {
+                    className: "mb-5 grid grid-cols-4 gap-2",
                     children: [
-                      b.jsxs("div", {
-                        className:
-                          "p-2.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition cursor-pointer font-sans normal-case text-slate-200",
-                        children: [
-                          '⚡ "Siya, change atmosphere of your core to crimson" ',
-                          b.jsx("span", {
-                            className:
-                              "text-[10px] font-mono text-indigo-400 block mt-0.5 font-medium",
-                            children: "Shifts theme color background",
-                          }),
-                        ],
-                      }),
-                      b.jsxs("div", {
-                        className:
-                          "p-2.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition cursor-pointer font-sans normal-case text-slate-200",
-                        children: [
-                          '⚡ "Search YouTube for MrBeast and play the first video" ',
-                          b.jsx("span", {
-                            className:
-                              "text-[10px] font-mono text-indigo-400 block mt-0.5 font-medium",
-                            children: "Uses your real PC browser and mouse",
-                          }),
-                        ],
-                      }),
-                      b.jsxs("div", {
-                        className:
-                          "p-2.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition cursor-pointer font-sans normal-case text-slate-200",
-                        children: [
-                          '⚡ "Tell me a witty joke and change background to gold" ',
-                          b.jsx("span", {
-                            className:
-                              "text-[10px] font-mono text-indigo-400 block mt-0.5 font-medium",
-                            children: "Combines tools & voice",
-                          }),
-                        ],
-                      }),
-                    ],
+                      ["dusk", "Dusk", "linear-gradient(180deg,#33264a,#9a6671,#c48478)"],
+                      ["rose", "Rose", "linear-gradient(180deg,#4c0519,#9f1239)"],
+                      ["violet", "Violet", "linear-gradient(180deg,#2e1065,#6d28d9)"],
+                      ["celestial", "Celestial", "linear-gradient(180deg,#082f49,#0369a1)"],
+                      ["emerald", "Emerald", "linear-gradient(180deg,#022c22,#047857)"],
+                      ["gold", "Gold", "linear-gradient(180deg,#451a03,#b45309)"],
+                      ["crimson", "Crimson", "linear-gradient(180deg,#450a0a,#b91c1c)"],
+                      ["charcoal", "Charcoal", "linear-gradient(180deg,#020617,#334155)"],
+                    ].map(([id, label, bg]) =>
+                      b.jsxs(
+                        "button",
+                        {
+                          onClick: () => B(id),
+                          className: `flex flex-col items-center gap-1.5 rounded-xl p-1.5 text-[11px] transition ${Nt === id ? "bg-white/15 text-white ring-1 ring-orange-200/60" : "text-white/65 hover:bg-white/10"}`,
+                          children: [
+                            b.jsx("span", { className: "h-9 w-full rounded-lg ring-1 ring-white/15", style: { background: bg } }),
+                            label,
+                          ],
+                        },
+                        id,
+                      ),
+                    ),
+                  }),
+                  b.jsx("p", {
+                    className: "text-xs text-white/60 mb-2",
+                    children: "Things you can say to SIYA:",
+                  }),
+                  b.jsx("div", {
+                    className: "space-y-2 text-xs",
+                    children: [
+                      ["“Aaj ka din thoda heavy tha…”", "Just talk — she listens"],
+                      ["“Change the theme to rose”", "Changes the colours"],
+                      ["“Play some calm music on YouTube”", "Uses your browser"],
+                    ].map(([say, hint]) =>
+                      b.jsxs(
+                        "div",
+                        {
+                          className: "p-2.5 rounded-xl bg-white/5 border border-white/5 text-white/90",
+                          children: [say, b.jsx("span", { className: "block mt-0.5 text-[11px] text-orange-200/80", children: hint })],
+                        },
+                        say,
+                      ),
+                    ),
                   }),
                 ],
               }),
@@ -1182,8 +1178,8 @@ export function MainExperience() {
                         className:
                           "text-[7px] font-bold font-mono tracking-widest text-slate-200",
                         children: r
-                          ? "SCREEN VISION PAUSED"
-                          : "SCREEN VISION ACTIVE",
+                          ? "Screen sharing paused"
+                          : "Screen sharing on",
                       }),
                     ],
                   }),
@@ -1299,7 +1295,7 @@ export function MainExperience() {
                       b.jsx("span", {
                         className:
                           "text-[7px] font-bold font-mono text-slate-200",
-                        children: "SCREEN VISION MODE",
+                        children: "Screen sharing",
                       }),
                       b.jsx("span", {
                         className:

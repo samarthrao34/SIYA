@@ -187,11 +187,11 @@ export function SettingsPanel({
       }
     },
     tt = [
-      { id: "general", label: "GENERAL", icon: ty },
-      { id: "character", label: "CHARACTER", icon: Qo },
-      { id: "voice", label: "VOICE", icon: $g },
-      { id: "system", label: "SYSTEM", icon: yp },
-      { id: "about", label: "ABOUT", icon: vp },
+      { id: "general", label: "General", icon: ty },
+      { id: "character", label: "Character", icon: Qo },
+      { id: "voice", label: "Voice", icon: $g },
+      { id: "system", label: "System", icon: yp },
+      { id: "about", label: "About", icon: vp },
     ];
   return b.jsx(Ti, {
     children:
@@ -233,7 +233,7 @@ export function SettingsPanel({
                             className:
                               "font-display font-medium text-[10px] tracking-tight text-white flex items-center gap-1",
                             children: [
-                              "Siya Configuration",
+                              "Settings",
                               b.jsx(Qo, {
                                 size: 9,
                                 className: "text-cyan-400",
@@ -290,14 +290,14 @@ export function SettingsPanel({
                           children: "Startup & Appearance",
                         }),
                         b.jsx(ToggleRow, {
-                          label: "LAUNCH AT STARTUP",
+                          label: "Launch at startup",
                           description:
                             "Start Siya when you log in",
                           checked: s.autoStart,
                           onChange: (F) => o({ autoStart: F }),
                         }),
                         b.jsx(ToggleRow, {
-                          label: "UI ANIMATIONS",
+                          label: "Animations",
                           description: "Enable motion and orb transitions",
                           checked: s.animations,
                           onChange: (F) => o({ animations: F }),
@@ -419,7 +419,7 @@ export function SettingsPanel({
                                         b.jsx("div", {
                                           className:
                                             "text-[8px] font-bold font-mono text-slate-200",
-                                          children: "GEMINI API KEY",
+                                          children: "Gemini API key",
                                         }),
                                         b.jsx("div", {
                                           className:
@@ -483,7 +483,7 @@ export function SettingsPanel({
                           ],
                         }),
                         b.jsx(ToggleRow, {
-                          label: "WAKE WORD",
+                          label: "Wake word",
                           description:
                             "Always-listen for the activation phrase",
                           checked: s.wakeWordEnabled,
@@ -766,7 +766,7 @@ export function SettingsPanel({
                                 b.jsxs("div", {
                                   className: "flex justify-between",
                                   children: [
-                                    b.jsx("span", { children: "VERSION" }),
+                                    b.jsx("span", { children: "Version" }),
                                     b.jsx("span", {
                                       className: "text-slate-300",
                                       children: "V2.0.0",
@@ -776,7 +776,7 @@ export function SettingsPanel({
                                 b.jsxs("div", {
                                   className: "flex justify-between",
                                   children: [
-                                    b.jsx("span", { children: "ENGINE" }),
+                                    b.jsx("span", { children: "Engine" }),
                                     b.jsx("span", {
                                       className: "text-slate-300",
                                       children: "Gemini Live",
@@ -786,7 +786,7 @@ export function SettingsPanel({
                                 b.jsxs("div", {
                                   className: "flex justify-between",
                                   children: [
-                                    b.jsx("span", { children: "DESKTOP" }),
+                                    b.jsx("span", { children: "Desktop" }),
                                     b.jsx("span", {
                                       className: "text-slate-300",
                                       children: "FastAPI Agent",
@@ -796,7 +796,7 @@ export function SettingsPanel({
                                 b.jsxs("div", {
                                   className: "flex justify-between",
                                   children: [
-                                    b.jsx("span", { children: "WAKE WORD" }),
+                                    b.jsx("span", { children: "Wake word" }),
                                     b.jsx("span", {
                                       className: "text-slate-300",
                                       children: "Web Speech API",

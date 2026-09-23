@@ -522,7 +522,7 @@ export function HealthDashboard({ isOpen, onClose, themeColor }) {
                         onClick: () => setExportOpen(!exportOpen),
                         className:
                           "flex items-center gap-1 px-1.5 py-0.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 hover:bg-cyan-500/20 text-[7px] font-mono tracking-wider text-cyan-300 transition shrink-0 cursor-pointer",
-                        children: [b.jsx(DownloadIcon, { size: 8 }), b.jsx("span", { children: "EXPORT DATA" })],
+                        children: [b.jsx(DownloadIcon, { size: 8 }), b.jsx("span", { children: "Export data" })],
                       }),
                       exportOpen &&
                         b.jsxs("div", {

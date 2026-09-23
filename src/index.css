@@ -13,3 +13,77 @@ html[data-animations="off"] *::after {
   transition: none !important;
   scroll-behavior: auto !important;
 }
+
+/*
+ * Dusk skin: restyles the recovered sci-fi panels (Themes, Health, Memories,
+ * Settings, screen/camera cards) to match the calm Dusk theme. Applied for
+ * every theme via the root's data-skin="dusk"; themes only change the backdrop.
+ */
+#siya-holographic-desktop[data-skin="dusk"] .font-mono {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+#siya-holographic-desktop[data-skin="dusk"] .uppercase {
+  text-transform: none;
+}
+#siya-holographic-desktop[data-skin="dusk"] :is(.tracking-widest, .tracking-wider, [class*="tracking-["]) {
+  letter-spacing: 0.01em;
+}
+/* the header brand keeps its spaced-out wordmark */
+#siya-holographic-desktop[data-skin="dusk"] header > div:first-child span {
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+}
+/* soft plum scrollbars instead of bright white bars */
+#siya-holographic-desktop[data-skin="dusk"] * {
+  scrollbar-color: rgba(252, 211, 193, 0.35) transparent;
+  scrollbar-width: thin;
+}
+#siya-holographic-desktop[data-skin="dusk"] ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+#siya-holographic-desktop[data-skin="dusk"] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+#siya-holographic-desktop[data-skin="dusk"] ::-webkit-scrollbar-thumb {
+  background: rgba(252, 211, 193, 0.35);
+  border-radius: 999px;
+}
+#siya-holographic-desktop[data-skin="dusk"] ::-webkit-scrollbar-button {
+  display: none;
+}
+/* tiny labels were unreadable */
+#siya-holographic-desktop[data-skin="dusk"] :is([class*="text-[6px]"], [class*="text-[7px]"], [class*="text-[8px]"], [class*="text-[9px]"]) {
+  font-size: 11px;
+  line-height: 1.35;
+}
+#siya-holographic-desktop[data-skin="dusk"] [class*="text-[10px]"] {
+  font-size: 12px;
+}
+/* near-black panel surfaces become warm plum glass */
+#siya-holographic-desktop[data-skin="dusk"] :is([class*="bg-slate-950"], [class*="bg-slate-900"], [class*="bg-[#0"], [class*="bg-black/"]) {
+  background-color: rgba(43, 33, 64, 0.94);
+}
+#siya-holographic-desktop[data-skin="dusk"] :is([class*="bg-slate-800"], [class*="bg-slate-700"]) {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+/* cyan / sky / indigo sci-fi accents become Dusk peach */
+#siya-holographic-desktop[data-skin="dusk"] :is([class*="text-cyan-"], [class*="text-sky-"], [class*="text-indigo-"]) {
+  color: #fcd3c1;
+}
+#siya-holographic-desktop[data-skin="dusk"] :is([class*="border-cyan-"], [class*="border-sky-"], [class*="border-indigo-"]) {
+  border-color: rgba(252, 211, 193, 0.35);
+}
+#siya-holographic-desktop[data-skin="dusk"] :is([class*="bg-cyan-"], [class*="bg-sky-"], [class*="bg-indigo-"]):not([class*="blur-"]) {
+  background-color: rgba(251, 191, 170, 0.28);
+}
+#siya-holographic-desktop[data-skin="dusk"] :is([class*="bg-cyan-5"], [class*="bg-cyan-4"]):not([class*="/"]) {
+  background-color: #f4a79a;
+}
+#siya-holographic-desktop[data-skin="dusk"] :is([class*="shadow-[0_0_"]) {
+  box-shadow: 0 6px 24px rgba(20, 10, 30, 0.35);
+}
+/* grey sci-fi body text is a little too dim on plum */
+#siya-holographic-desktop[data-skin="dusk"] :is(.text-slate-500, .text-slate-600) {
+  color: rgba(255, 255, 255, 0.55);
+}
