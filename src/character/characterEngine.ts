@@ -15,6 +15,7 @@
 import * as THREE from "three";
 import { Parser as lx } from "mmd-parser";
 import { retargetFrame, SOMA30_JOINT_COUNT, buildBasePoseCorrections } from "./kimodoRetarget";
+import { loadVrmAsMmdModel } from "./vrmModelSource";
 
 // Vendor three.js symbols resolved from the original minified bundle's own
 // import/export chain (dist/assets/index-qnLjC2CG.js -> three-BBlFD6pU.js),
@@ -3768,10 +3769,13 @@ export class CharacterEngine {
   async load() {
     var i, s, o, r;
     try {
-      const h = await ZS({
+      // VRM avatars (SIYA) go through vrmModelSource.ts, which returns the
+      // same model structure as the PMX loader ZS.
+      const h = await (this.config.format === "vrm" ? loadVrmAsMmdModel : ZS)({
         modelUrl: this.config.modelUrl,
         textureMapUrl: this.config.textureMapUrl,
         onProgress: this.onProgress,
+        bakeAmbientOcclusion: YS,
         createMaterial: (v, S) => {
           const T = wp(v.name, this.config.materialRoles),
             A = this.config.materialTuning[T] ?? {};

@@ -11,6 +11,7 @@
 import * as L from "react";
 import * as b from "react/jsx-runtime";
 import { CharacterEngine, CHARACTER_REGISTRY, DEFAULT_CHARACTER_ID } from "./characterEngine";
+import { SIYA_CHARACTER } from "./siyaCharacter";
 import { Sparkles as Qo, TriangleAlert as ny } from "lucide-react";
 import * as THREE from "three";
 
@@ -25,8 +26,19 @@ function showCameraDevControls(): boolean {
   }
 }
 
-export function getCharacterPreset(a = DEFAULT_CHARACTER_ID) {
-  return CHARACTER_REGISTRY[a] ?? CHARACTER_REGISTRY[DEFAULT_CHARACTER_ID];
+// SIYA's own VRoid avatar is the default. localStorage "siya.character" =
+// "evelyn" switches back to the original PMX character.
+const REGISTRY = { ...CHARACTER_REGISTRY, [SIYA_CHARACTER.id]: SIYA_CHARACTER };
+function defaultCharacterId(): string {
+  try {
+    return localStorage.getItem("siya.character") || SIYA_CHARACTER.id;
+  } catch {
+    return SIYA_CHARACTER.id;
+  }
+}
+
+export function getCharacterPreset(a = defaultCharacterId()) {
+  return REGISTRY[a] ?? REGISTRY[DEFAULT_CHARACTER_ID];
 }
 export const CharacterViewport = ({
   characterId: a,
