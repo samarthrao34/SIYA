@@ -1,0 +1,30 @@
+# Dependencies and build output
+node_modules/
+dist/
+agent_dist/
+mobile/build/
+mobile/webapp-dist/
+__pycache__/
+*.pyc
+
+# Python environments and downloaded voice models
+.venv*/
+local_voice/.venv*/
+local_voice/models/
+local_voice/samples/
+
+# Secrets, keys and signed builds -- never commit these
+.env
+.env.*
+secrets.json
+*.keystore
+*.keystore.bak
+*.jks
+*.apk
+*.aab
+*.idsig
+
+# Runtime data and logs (may contain personal conversations)
+.siya-data/
+logs/
+*.log

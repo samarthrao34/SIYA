@@ -1,0 +1,15 @@
+/*
+ * Recovered from dist/assets/index-DAtgVL5Z.css's first line (the only part
+ * that isn't Tailwind-generated utility output, which regenerates from the
+ * source below via the Tailwind v4 Vite plugin).
+ */
+@import "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap";
+@import "tailwindcss";
+
+html[data-animations="off"] *,
+html[data-animations="off"] *::before,
+html[data-animations="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
