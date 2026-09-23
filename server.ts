@@ -2293,7 +2293,7 @@ async function startServer() {
                     properties: {
                       color: {
                         type: Type.STRING,
-                        description: "The theme color name (violet, crimson, emerald, celestial, gold, rose, charcoal)"
+                        description: "The theme color name (dusk, violet, crimson, emerald, celestial, gold, rose, charcoal). dusk is the calm default."
                       }
                     },
                     required: ["color"]

@@ -89,6 +89,8 @@ export function MemoriesPanel({
           return "border-amber-500/30 text-amber-400 bg-amber-500/10";
         case "rose":
           return "border-pink-500/30 text-pink-400 bg-pink-500/10";
+        case "dusk":
+          return "border-orange-300/30 text-orange-200 bg-orange-300/10";
         case "charcoal":
         default:
           return "border-indigo-500/30 text-indigo-400 bg-indigo-500/10";

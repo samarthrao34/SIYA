@@ -334,7 +334,7 @@ export function MainExperience() {
         await U());
     },
     [xt, kt] = L.useState("idle"),
-    [Nt, B] = L.useState("charcoal"),
+    [Nt, B] = L.useState("dusk"),
     [Q, J] = L.useState(""),
     [st, dt] = L.useState("idle"),
     [motionIntent, setMotionIntent] = L.useState("idle"),
@@ -606,6 +606,7 @@ export function MainExperience() {
               "gold",
               "rose",
               "charcoal",
+              "dusk",
             ];
           Ot && te.includes(Ot)
             ? (B(Ot),
@@ -683,6 +684,8 @@ export function MainExperience() {
         return "from-amber-950/30 via-yellow-950/15 to-slate-950";
       case "rose":
         return "from-rose-950/40 via-pink-950/20 to-slate-950";
+      case "dusk":
+        return "";
       case "charcoal":
       default:
         return "from-slate-900/50 via-slate-950/30 to-slate-950";
@@ -690,23 +693,25 @@ export function MainExperience() {
   };
   return b.jsx(MotionConfig, { skipAnimations: !$t.animations, children: b.jsxs("div", {
     id: "siya-holographic-desktop",
-    className: `relative w-full h-screen overflow-hidden bg-[#020205] text-white ${fr()} theme-transition flex flex-col justify-between p-6 sm:p-10 select-none`,
+    // "dusk" (default): a calm plum -> mauve -> warm peach evening sky instead
+    // of the original near-black sci-fi backdrop.
+    className: `relative w-full h-screen overflow-hidden ${Nt === "dusk" ? "bg-[linear-gradient(180deg,#1c1530_0%,#33264a_34%,#5c4063_66%,#9a6671_88%,#c48478_100%)]" : "bg-[#020205]"} text-white ${fr()} theme-transition flex flex-col justify-between p-6 sm:p-10 select-none`,
     children: [
       b.jsx("div", {
         className:
-          "absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-900/15 rounded-full blur-[120px] pointer-events-none",
+          `absolute top-[-10%] left-[-10%] w-[500px] h-[500px] ${Nt === "dusk" ? "bg-violet-300/10" : "bg-purple-900/15"} rounded-full blur-[120px] pointer-events-none`,
       }),
       b.jsx("div", {
         className:
-          "absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-cyan-900/15 rounded-full blur-[150px] pointer-events-none",
+          `absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] ${Nt === "dusk" ? "bg-orange-200/15" : "bg-cyan-900/15"} rounded-full blur-[150px] pointer-events-none`,
       }),
       b.jsx("div", {
         className:
-          "absolute top-[20%] right-[10%] w-[300px] h-[300px] bg-indigo-800/10 rounded-full blur-[100px] pointer-events-none",
+          `absolute top-[20%] right-[10%] w-[300px] h-[300px] ${Nt === "dusk" ? "bg-rose-300/10" : "bg-indigo-800/10"} rounded-full blur-[100px] pointer-events-none`,
       }),
       b.jsx("div", {
         className:
-          "absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.012)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.012)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none opacity-40",
+          `absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.012)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.012)_1px,transparent_1px)] bg-[size:32px_32px] pointer-events-none ${Nt === "dusk" ? "opacity-0" : "opacity-40"}`,
       }),
       // Soft glow behind SIYA so it is obvious whether she is listening or speaking.
       b.jsx("div", {

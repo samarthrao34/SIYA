@@ -74,6 +74,17 @@ export const SIYA_CHARACTER = {
   // the head. These were solved numerically so the right hand rests just in
   // front of the chin with the elbow in front of the body.
   gesturePoses: {
+    // Idle "wave": solved so the hand is up at face height, out to her left
+    // and in front, with the elbow bent below the shoulder.
+    wave: {
+      armL: [0.227, -0.783, 0.751],
+      elbowL: [1.508, -0.531, 2.431],
+    },
+    // Idle "stretch": both hands up over the head (right arm mirrors left).
+    stretch: {
+      armL: [1.233, -0.237, 2.793],
+      elbowL: [-0.41, -0.358, 0.323],
+    },
     thinking: {
       armR: [-1.268, -0.269, 0.436],
       elbowR: [-0.382, -2.419, 0.551],

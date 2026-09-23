@@ -3329,10 +3329,16 @@ export const Xs = Math.PI * 2,
         browUp: 0.25,
       },
       idleIntensity: 0.55,
-      pose: (a, i, s, o) => {
-        const r = a < 0.25 ? f2(a / 0.25) : a > 0.75 ? Wi((1 - a) / 0.25) : 1;
-        (s.addEuler(o.armL, 0, -0.25 * r, 1.02 * r, i),
-          s.addEuler(o.elbowL, 0, -0.55 * r, 0.32 * r, i));
+      pose: (a, i, s, o, poses) => {
+        const r = a < 0.25 ? f2(a / 0.25) : a > 0.75 ? Wi((1 - a) / 0.25) : 1,
+          wp = poses && poses.wave;
+        // A character config may supply its own raised-arm pose
+        // (config.gesturePoses.wave), blended by slerp.
+        wp
+          ? (s.addQuaternion(o.armL, eulerQuat(wp.armL[0], wp.armL[1], wp.armL[2]), i * r),
+            s.addQuaternion(o.elbowL, eulerQuat(wp.elbowL[0], wp.elbowL[1], wp.elbowL[2]), i * r))
+          : (s.addEuler(o.armL, 0, -0.25 * r, 1.02 * r, i),
+            s.addEuler(o.elbowL, 0, -0.55 * r, 0.32 * r, i));
         const h = Math.sin(a * Xs * 3.2) * r;
         (s.addEuler(o.elbowL, 0, h * 0.3, 0, i),
           s.addEuler(o.wristL, 0, h * 0.38, h * 0.12, i),
@@ -3363,12 +3369,19 @@ export const Xs = Math.PI * 2,
       expression: { smileEyes: 0.35, browUp: 0.3 },
       idleIntensity: 0.4,
       blinkOnStart: !0,
-      pose: (a, i, s, o) => {
-        const r = a < 0.35 ? Wi(a / 0.35) : a > 0.6 ? Wi((1 - a) / 0.4) : 1;
-        (s.addEuler(o.armL, 0, -0.2 * r, 0.75 * r, i),
-          s.addEuler(o.armR, 0, 0.2 * r, -0.75 * r, i),
-          s.addEuler(o.elbowL, 0, -0.3 * r, 0.2 * r, i),
-          s.addEuler(o.elbowR, 0, 0.3 * r, -0.2 * r, i),
+      pose: (a, i, s, o, poses) => {
+        const r = a < 0.35 ? Wi(a / 0.35) : a > 0.6 ? Wi((1 - a) / 0.4) : 1,
+          sp = poses && poses.stretch;
+        // config.gesturePoses.stretch gives the left arm; the right mirrors it.
+        (sp
+          ? (s.addQuaternion(o.armL, eulerQuat(sp.armL[0], sp.armL[1], sp.armL[2]), i * r),
+            s.addQuaternion(o.armR, eulerQuat(sp.armL[0], -sp.armL[1], -sp.armL[2]), i * r),
+            s.addQuaternion(o.elbowL, eulerQuat(sp.elbowL[0], sp.elbowL[1], sp.elbowL[2]), i * r),
+            s.addQuaternion(o.elbowR, eulerQuat(sp.elbowL[0], -sp.elbowL[1], -sp.elbowL[2]), i * r))
+          : (s.addEuler(o.armL, 0, -0.2 * r, 0.75 * r, i),
+            s.addEuler(o.armR, 0, 0.2 * r, -0.75 * r, i),
+            s.addEuler(o.elbowL, 0, -0.3 * r, 0.2 * r, i),
+            s.addEuler(o.elbowR, 0, 0.3 * r, -0.2 * r, i)),
           s.addEuler(o.upperBody, -0.06 * r, 0, 0, i),
           s.addEuler(o.upperBody2, -0.05 * r, 0, 0, i),
           s.addEuler(o.head, -0.07 * r, 0, 0, i),
@@ -3505,7 +3518,7 @@ export class kh {
         this.active && g.weight > 0)
       ) {
         const m = THREE.MathUtils.clamp(g.elapsed / g.behaviour.duration, 0, 1);
-        (d = (f = g.behaviour).pose) == null || d.call(f, m, g.weight, r, h);
+        (d = (f = g.behaviour).pose) == null || d.call(f, m, g.weight, r, h, this.poses);
       }
       return;
     }
@@ -3853,6 +3866,7 @@ export class CharacterEngine {
         (this.kimodoMotion = new KimodoMotionSource()),
         (this.gaze = new m2(h, this.config.bones, this.config.idle)),
         (this.behaviours = new kh(this.config.behaviour)),
+        (this.behaviours.poses = this.config.gesturePoses ?? null),
         (this.physics = new x2(h, this.config.physics)),
         h.mesh.updateMatrixWorld(!0),
         this.physics.reset(),

@@ -404,6 +404,11 @@ export const CharacterViewport = ({
 };
 export function getThemeColors(a) {
   switch (a) {
+    case "dusk":
+      return {
+        primary: "rgba(255, 214, 190, 1)",
+        secondary: "rgba(236, 160, 176, 0.8)",
+      };
     case "violet":
       return {
         primary: "rgba(147, 51, 234, 1)",
