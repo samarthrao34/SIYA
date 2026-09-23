@@ -13,8 +13,8 @@ function fixture(){
 test('actual voice adapter schedules avatar from audio clock and cancels old playback',()=>{
  const {live,events,sources,unsub,pcm}=fixture();
  live.beginAvatarSpeech('a');live.playAudioPCMChunk(pcm,'a');
- assert.equal(sources[0].startTime,10.03);
- assert.equal(events.find(e=>e.type==='audioWindow').start,10.03);
+ assert.equal(sources[0].startTime,10.15);
+ assert.equal(events.find(e=>e.type==='audioWindow').start,10.15);
  live.handleInterruption('a');assert.equal(sources[0].stopped,true);
  assert.equal(live.beginAvatarSpeech('a'),false);live.playAudioPCMChunk(pcm,'a');assert.equal(sources.length,1);
  live.beginAvatarSpeech('b');live.playAudioPCMChunk(pcm,'b');

@@ -527,7 +527,10 @@ export class LiveSession {
         ((h.buffer = r), h.connect(this.outputGainNode));
         const f = this.outputAudioCtx.currentTime;
         const generation = this.playbackGeneration;
-        (this.nextStartTime < f && (this.nextStartTime = f + 0.03),
+        // Jitter buffer: when playback has run dry (start of an utterance, or a
+        // chunk that arrived late), schedule 150 ms ahead instead of 30 ms, so
+        // network jitter or a busy render frame doesn't cut her voice up.
+        (this.nextStartTime < f && (this.nextStartTime = f + 0.15),
           h.start(this.nextStartTime),
           publishAvatarEvent({type:'audioWindow',utteranceId,start:this.nextStartTime,end:this.nextStartTime+r.duration}),
           publishAvatarEvent({type:'visemes',utteranceId,frames:amplitudeFrames(o,24000,this.nextStartTime)}),

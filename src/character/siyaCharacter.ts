@@ -70,6 +70,9 @@ export const SIYA_CHARACTER = {
     hair: { ...evelyn.materialTuning.hair, alphaTest: 0.5 },
   },
   hiddenMaterials: [],
+  // 40 fps is visually smooth for an idle/talking avatar and leaves headroom
+  // on integrated GPUs, so rendering never starves audio playback.
+  render: { ...evelyn.render, targetFps: 40 },
   // Evelyn's thinking pose (hand to chin) folds a T-pose-rest arm up behind
   // the head. These were solved numerically so the right hand rests just in
   // front of the chin with the elbow in front of the body.

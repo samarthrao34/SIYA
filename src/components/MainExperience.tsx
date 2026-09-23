@@ -727,7 +727,7 @@ export function MainExperience() {
       // Soft glow behind SIYA so it is obvious whether she is listening or speaking.
       b.jsx("div", {
         "aria-hidden": !0,
-        className: `pointer-events-none absolute left-1/2 top-[42%] z-0 h-[70vh] w-[70vh] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[90px] transition-all duration-700 ${a === "speaking" ? "bg-violet-300/20 scale-105 opacity-100" : a === "listening" ? (st === "thinking" ? "bg-amber-200/15 opacity-100" : "bg-rose-200/20 opacity-100 animate-pulse") : "opacity-0 scale-90"}`,
+        className: `pointer-events-none absolute left-1/2 top-[42%] z-0 h-[70vh] w-[70vh] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[90px] transition-all duration-700 ${a === "speaking" ? "bg-violet-300/20 scale-105 opacity-100" : a === "listening" ? (st === "thinking" ? "bg-amber-200/15 opacity-100" : "bg-rose-200/20 opacity-100") : "opacity-0 scale-90"}`,
       }),
       b.jsx("div", {
         className: "absolute inset-0 z-0 pointer-events-auto select-none",
