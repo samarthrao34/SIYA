@@ -39,7 +39,7 @@ export function PrivacyCenter() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-3 left-3 z-[60] flex items-center gap-1.5 rounded-full border border-white/10 bg-black/40 px-3 py-1.5 text-[11px] text-white/55 backdrop-blur-md transition hover:text-white/90"
+        className="fixed bottom-3 left-3 z-[60] flex items-center gap-1.5 rounded-full border border-white/10 bg-[#2b2140]/70 px-3 py-1.5 text-[11px] text-white/55 transition hover:text-white/90"
         title="Privacy & your data"
       >
         <ShieldCheck className="h-3.5 w-3.5 text-emerald-300/80" />

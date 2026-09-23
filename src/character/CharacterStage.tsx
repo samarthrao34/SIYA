@@ -504,7 +504,19 @@ export const CharacterStage = ({
         };
         window.addEventListener("resize", Y);
         const X = new Uint8Array(64),
-          P = () => {
+          // Throttle: the particle layer is a full-window canvas; redrawing it
+          // at 60 fps cost more CPU than the 3D avatar and could starve audio
+          // playback. 20 fps looks the same for slow-drifting particles.
+          frameGap = 50;
+        let lastDraw = 0;
+        const P = () => {
+            const now = performance.now();
+            if (now - lastDraw < frameGap) {
+              d.current = requestAnimationFrame(P);
+              return;
+            }
+            const step = lastDraw ? Math.min(4, (now - lastDraw) / 16.7) : 1;
+            lastDraw = now;
             A.clearRect(0, 0, N, D);
             const tt = getThemeColors(s),
               F = i === "speaking" ? v : i === "listening" ? S : null;
@@ -536,8 +548,8 @@ export const CharacterStage = ({
               A.fill(),
               A.restore());
             for (const lt of m.current) {
-              ((lt.y -= lt.speed * (1 + g.current * 1.8)),
-                (lt.x += Math.sin(lt.y * 0.015 + lt.size) * 0.4));
+              ((lt.y -= lt.speed * (1 + g.current * 1.8) * step),
+                (lt.x += Math.sin(lt.y * 0.015 + lt.size) * 0.4 * step));
               const xt = lt.opacity * Math.max(0, lt.y / D);
               (lt.y < D * 0.12 &&
                 ((lt.y = D + Math.random() * 30), (lt.x = Math.random() * N)),

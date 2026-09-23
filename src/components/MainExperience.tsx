@@ -1074,7 +1074,7 @@ export function MainExperience() {
             onSubmit: ea,
             style: { maxWidth: "380px", order: 3 },
             className:
-              `mb-1 flex w-full items-center gap-2 rounded-full border py-1 pl-1 pr-1 shadow-[0_8px_30px_rgba(20,10,30,0.35)] backdrop-blur-md transition-colors duration-500 ${a === "listening" ? (st === "thinking" ? "border-amber-200/40 bg-[#2b2140]/45" : "border-rose-200/50 bg-[#3a2540]/50") : a === "speaking" ? "border-violet-200/50 bg-[#2f2548]/50" : "border-white/15 bg-[#2b2140]/45"}`,
+              `mb-1 flex w-full items-center gap-2 rounded-full border py-1 pl-1 pr-1 shadow-[0_8px_30px_rgba(20,10,30,0.35)] transition-colors duration-500 ${a === "listening" ? (st === "thinking" ? "border-amber-200/40 bg-[#2b2140]/75" : "border-rose-200/50 bg-[#3a2540]/75") : a === "speaking" ? "border-violet-200/50 bg-[#2f2548]/75" : "border-white/15 bg-[#2b2140]/70"}`,
             children: [
               // Mic: starts/stops the voice conversation. Its colour and the
               // placeholder show what SIYA is doing.
