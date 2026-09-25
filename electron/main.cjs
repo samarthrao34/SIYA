@@ -1,0 +1,571 @@
+/* ===========================================================================
+ * SIYA — Electron main process (Phase 1)
+ * ---------------------------------------------------------------------------
+ * Responsibilities in this phase:
+ *   1. Enforce a single running instance.
+ *   2. Launch the existing Node backend (server.ts, bundled to dist/server.cjs)
+ *      silently as a child process — no console window, no browser tab.
+ *   3. Show a splash window while the backend boots, then load the real UI
+ *      (http://localhost:3000) into the main application window.
+ *   4. Clean up the backend (and its child Python agent) on quit.
+ *
+ * Tray controls, window-state persistence and packaged updates are enabled.
+ * The backend and
+ * AI logic are reused verbatim — nothing here reimplements chat/memory/voice.
+ * ========================================================================= */
+
+'use strict';
+
+const { app, BrowserWindow, Menu, shell, dialog, ipcMain, desktopCapturer, session, screen, Tray, nativeImage, Notification, safeStorage } = require('electron');
+const crypto = require('crypto');
+
+// Electron only uses the OS keyring on GNOME/KDE; under other Linux desktops
+// (e.g. Hyprland) it silently falls back to a hard-coded key. Ask for the
+// Secret Service (gnome-keyring) explicitly so the data key is truly sealed.
+if (process.platform === 'linux') app.commandLine?.appendSwitch('password-store', 'gnome-libsecret');
+const path = require('path');
+const http = require('http');
+const { spawn, execFile } = require('child_process');
+const fs = require('fs');
+const { restoreBounds, loadState, saveState } = require('./window-state.cjs');
+const { setupUpdates } = require('./updates.cjs');
+
+// --- Constants -------------------------------------------------------------
+const SERVER_PORT = 3000;
+const SERVER_ORIGIN = `http://localhost:${SERVER_PORT}`;
+const SERVER_READY_TIMEOUT_MS = 40_000;
+
+// In development we run from the repo root; when packaged the app files live in
+// resources/app (asar-unpacked handling is added in the packaging phase).
+const APP_ROOT = app.isPackaged
+  ? path.join(process.resourcesPath, 'app')
+  : path.join(__dirname, '..');
+
+const SERVER_ENTRY = path.join(APP_ROOT, 'dist', 'server.cjs');
+const APP_ICON = path.join(APP_ROOT, 'build', 'icon.png');
+
+/** @type {import('child_process').ChildProcess | null} */
+let serverProcess = null;
+/** @type {BrowserWindow | null} */
+let mainWindow = null;
+/** @type {BrowserWindow | null} */
+let splashWindow = null;
+let isQuitting = false;
+let tray = null;
+let windowStateTimer = null;
+let updateControls = null;
+let phoneBridgeTimer = null;
+
+function startPhoneBridge() {
+  if (phoneBridgeTimer) return;
+  const localAdb = path.join(app.getPath('home'), '.local', 'lib', 'android-sdk', 'platform-tools', 'adb');
+  const adb = process.env.SIYA_ADB || (fs.existsSync(localAdb) ? localAdb : 'adb');
+  const refresh = () => {
+    execFile(adb, ['reverse', `tcp:${SERVER_PORT}`, `tcp:${SERVER_PORT}`], { timeout: 5000 }, () => {
+      // A missing phone is normal. Retrying keeps the bridge working after a
+      // cable disconnect without interrupting the desktop application.
+    });
+  };
+  refresh();
+  phoneBridgeTimer = setInterval(refresh, 5000);
+  phoneBridgeTimer.unref?.();
+}
+
+function stopPhoneBridge() {
+  if (phoneBridgeTimer) clearInterval(phoneBridgeTimer);
+  phoneBridgeTimer = null;
+}
+
+function showMainWindow() {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function createTray() {
+  try {
+    const icon = nativeImage.createFromPath(APP_ICON).resize({ width: 24, height: 24 });
+    if (icon.isEmpty()) throw new Error('Tray icon is missing');
+    tray = new Tray(icon);
+    tray.setToolTip('SIYA');
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Show Siya', click: showMainWindow },
+      { label: 'Check for updates', click: () => updateControls?.check(true) },
+      { type: 'separator' },
+      { label: 'Quit Siya', click: () => app.quit() },
+    ]));
+    tray.on('click', showMainWindow);
+  } catch (error) {
+    tray = null;
+    console.error('Tray unavailable; closing the window will quit:', error.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Single-instance guard — second launches focus the existing window instead of
+// starting a second backend on the same port.
+// ---------------------------------------------------------------------------
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+  app.whenReady().then(bootstrap);
+}
+
+// ---------------------------------------------------------------------------
+// Backend lifecycle
+// ---------------------------------------------------------------------------
+/**
+ * Per-install key for encrypting SIYA's personal data at rest (see
+ * server_secureStore.ts). The key itself is sealed with the OS keyring via
+ * safeStorage and stored as data-key.bin in userData; the backend only ever
+ * receives it in its environment. Losing this file makes the encrypted data
+ * unreadable, so it is never deleted by "delete all my data".
+ */
+function loadDataKey(dataDir) {
+  const keyFile = path.join(dataDir, 'data-key.bin');
+  try {
+    if (!safeStorage.isEncryptionAvailable()) {
+      console.warn('[SIYA] OS keyring unavailable; personal data stays unencrypted.');
+      return null;
+    }
+    if (fs.existsSync(keyFile)) {
+      return safeStorage.decryptString(fs.readFileSync(keyFile));
+    }
+    const key = crypto.randomBytes(32).toString('base64');
+    fs.mkdirSync(dataDir, { recursive: true });
+    fs.writeFileSync(keyFile, safeStorage.encryptString(key), { mode: 0o600 });
+    return key;
+  } catch (error) {
+    console.error('[SIYA] Could not load the data encryption key:', error);
+    return null;
+  }
+}
+
+function startBackend() {
+  if (!fs.existsSync(SERVER_ENTRY)) {
+    throw new Error(
+      `Backend bundle not found at ${SERVER_ENTRY}. Run "npm run build" first.`,
+    );
+  }
+
+  // Use the Node runtime bundled with Electron (ELECTRON_RUN_AS_NODE) so the
+  // machine does not need a separate Node install once packaged.
+  // Data (memories, settings, secrets, logs) must live in a writable per-user
+  // folder — the install dir under Program Files is read-only.
+  const dataDir = app.getPath('userData');
+
+  const env = {
+    ...process.env,
+    NODE_ENV: 'production',
+    ELECTRON_RUN_AS_NODE: '1',
+    SIYA_LAUNCHED_BY: 'electron',
+    SIYA_DATA_DIR: dataDir,
+    SIYA_APP_ROOT: APP_ROOT,
+  };
+  const dataKey = loadDataKey(dataDir);
+  if (dataKey) env.SIYA_DATA_KEY = dataKey;
+  if (app.isPackaged) {
+    // The desktop agent uses this exact executable for the per-user
+    // auto-start entry. It must never point at source scripts or Python.
+    env.SIYA_EXECUTABLE = process.execPath;
+  }
+
+  serverProcess = spawn(process.execPath, [SERVER_ENTRY], {
+    cwd: APP_ROOT,
+    env,
+    // The private IPC channel is used only for one-shot screen capture. It
+    // avoids a localhost capture server and never broadcasts screen content.
+    stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+    windowsHide: true,
+  });
+
+  serverProcess.stdout?.on('data', (d) => process.stdout.write(`[server] ${d}`));
+  serverProcess.stderr?.on('data', (d) => process.stderr.write(`[server] ${d}`));
+  serverProcess.on('message', (message) => {
+    if (!message || message.type !== 'screen-capture-request' || !message.id) return;
+    void (async () => {
+      try {
+        const result = await captureDisplayForBackend(message.maxDim);
+        serverProcess?.send?.({
+          type: 'screen-capture-response',
+          id: message.id,
+          ok: true,
+          result,
+        });
+      } catch (error) {
+        serverProcess?.send?.({
+          type: 'screen-capture-response',
+          id: message.id,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })();
+  });
+  serverProcess.on('exit', (code, signal) => {
+    if (!isQuitting) {
+      dialog.showErrorBox(
+        'SIYA backend stopped',
+        `The SIYA backend process exited unexpectedly (code ${code}, signal ${signal}).`,
+      );
+      app.quit();
+    }
+  });
+}
+
+/**
+ * Take one privacy-scoped display snapshot for the backend's vision turn.
+ * SIYA's own window is hidden only while the frame is acquired, then restored
+ * to the exact visible/focused state it had before capture.
+ */
+async function captureDisplayForBackend(requestedMaxDim) {
+  const maxDim = Math.max(320, Math.min(1920, Number(requestedMaxDim) || 1440));
+  const point = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(point) || screen.getPrimaryDisplay();
+  const scaleFactor = Number(display.scaleFactor) || 1;
+  const captureWidth = Math.max(1, Math.round(display.bounds.width * scaleFactor));
+  const captureHeight = Math.max(1, Math.round(display.bounds.height * scaleFactor));
+
+  const canRestore = Boolean(mainWindow && !mainWindow.isDestroyed());
+  const wasVisible = canRestore && mainWindow.isVisible();
+  const wasFocused = canRestore && mainWindow.isFocused();
+  if (wasVisible) {
+    mainWindow.hide();
+    // Give Windows DWM one frame to expose the application underneath SIYA.
+    await new Promise((resolve) => setTimeout(resolve, 140));
+  }
+
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: { width: captureWidth, height: captureHeight },
+      fetchWindowIcons: false,
+    });
+    const source = sources.find((candidate) => String(candidate.display_id) === String(display.id)) || sources[0];
+    if (!source || !source.thumbnail || source.thumbnail.isEmpty()) {
+      throw new Error('Electron could not capture the selected display.');
+    }
+
+    let image = source.thumbnail;
+    const original = image.getSize();
+    if (Math.max(original.width, original.height) > maxDim) {
+      const ratio = maxDim / Math.max(original.width, original.height);
+      image = image.resize({
+        width: Math.max(1, Math.round(original.width * ratio)),
+        height: Math.max(1, Math.round(original.height * ratio)),
+        quality: 'best',
+      });
+    }
+    const payload = image.toJPEG(72);
+    const size = image.getSize();
+    if (!payload.length) throw new Error('Electron returned an empty screen image.');
+
+    return {
+      ok: true,
+      result: `Captured display (${original.width}x${original.height}).`,
+      width: original.width,
+      height: original.height,
+      payload_width: size.width,
+      payload_height: size.height,
+      image_base64: payload.toString('base64'),
+      image_mime: 'image/jpeg',
+      active_window: null,
+      capture_backend: 'electron-desktopCapturer',
+    };
+  } finally {
+    if (wasVisible && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      if (wasFocused) mainWindow.focus();
+    }
+  }
+}
+
+function stopBackend() {
+  if (serverProcess && !serverProcess.killed) {
+    try {
+      if (process.platform === 'win32') {
+        // Kill the whole tree so the auto-spawned Python agent goes too.
+        spawn('taskkill', ['/pid', String(serverProcess.pid), '/T', '/F']);
+      } else {
+        serverProcess.kill('SIGTERM');
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+  serverProcess = null;
+}
+
+/** Poll the backend until it answers, or reject on timeout. */
+function waitForBackend(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  return new Promise((resolve, reject) => {
+    const tryOnce = () => {
+      const req = http.get(SERVER_ORIGIN, (res) => {
+        res.resume();
+        resolve();
+      });
+      req.on('error', () => {
+        if (Date.now() > deadline) {
+          reject(new Error('Backend did not become ready in time.'));
+        } else {
+          setTimeout(tryOnce, 400);
+        }
+      });
+      req.setTimeout(2000, () => req.destroy());
+    };
+    tryOnce();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Windows
+// ---------------------------------------------------------------------------
+function createSplashWindow() {
+  splashWindow = new BrowserWindow({
+    width: 420,
+    height: 300,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    center: true,
+    show: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: '#00000000',
+    icon: APP_ICON,
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+  splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+  splashWindow.on('closed', () => (splashWindow = null));
+}
+
+function createMainWindow() {
+  const stateFile = path.join(app.getPath('userData'), 'window-state.json');
+  const savedState = loadState(stateFile);
+  mainWindow = new BrowserWindow({
+    ...restoreBounds(savedState, screen.getAllDisplays()),
+    // Tiling compositors (e.g. Hyprland) ignore min sizes, and Electron then
+    // lays the page out wider than the real window, which crops the UI. The
+    // layout is responsive down to ~600 px, so keep the minimum small.
+    minWidth: 600,
+    minHeight: 500,
+    show: false, // revealed on ready-to-show to avoid a white flash
+    backgroundColor: '#0a0a0f',
+    autoHideMenuBar: true,
+    title: 'SIYA',
+    icon: APP_ICON,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      spellcheck: true,
+    },
+  });
+
+  Menu.setApplicationMenu(null);
+
+  // Open external links (http/https to non-local hosts) in the real browser
+  // instead of navigating the app window.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http') && !url.startsWith(SERVER_ORIGIN)) {
+      shell.openExternal(url);
+      return { action: 'deny' };
+    }
+    return { action: 'allow' };
+  });
+
+  mainWindow.once('ready-to-show', () => {
+    if (splashWindow) splashWindow.close();
+    mainWindow?.show();
+    mainWindow?.focus();
+  });
+
+  // TEMP DEBUG (recovery verification only, remove after diagnosing)
+  mainWindow.webContents.on('console-message', (event) => {
+    console.log(`[renderer:${event.level}] ${event.message} (${event.sourceId}:${event.lineNumber})`);
+  });
+  mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {
+    console.log(`[did-fail-load] ${errorCode} ${errorDescription} ${validatedURL}`);
+  });
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    console.log(`[render-process-gone]`, details);
+  });
+
+  if (savedState.maximized) mainWindow.maximize();
+  const persist = () => {
+    clearTimeout(windowStateTimer);
+    windowStateTimer = setTimeout(() => { if (mainWindow) saveState(stateFile, mainWindow); }, 250);
+  };
+  mainWindow.on('resize', persist);
+  mainWindow.on('move', persist);
+  mainWindow.on('close', (event) => {
+    saveState(stateFile, mainWindow);
+    if (!isQuitting && tray) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+  mainWindow.on('closed', () => { clearTimeout(windowStateTimer); mainWindow = null; });
+
+  // ---------------------------------------------------------------------------
+  // Screen capture — getDisplayMedia() creates the MediaStream directly in the
+  // renderer. This main-process handler selects the display without trying to
+  // serialize a live MediaStream through contextBridge.
+  // ---------------------------------------------------------------------------
+  ipcMain.removeHandler('screen:get-sources');
+  ipcMain.handle('screen:get-sources', async (_event, options) => {
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 240, height: 140 },
+        ...(options && typeof options === 'object' ? options : {}),
+      });
+      return sources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        thumbnail: s.thumbnail ? s.thumbnail.toDataURL() : null,
+        display_id: s.display_id,
+        appIcon: s.appIcon ? s.appIcon.toDataURL() : null,
+      }));
+    } catch (err) {
+      console.error('[screen:get-sources] failed:', err);
+      return [];
+    }
+  });
+
+  // Grant capture only to SIYA's own local renderer and provide the display
+  // nearest the cursor (falling back to the primary display).
+  try {
+    const ses = session.defaultSession;
+    if (ses && typeof ses.setDisplayMediaRequestHandler === 'function') {
+      ses.setDisplayMediaRequestHandler(async (request, callback) => {
+        if (!request.videoRequested || !request.securityOrigin.startsWith(SERVER_ORIGIN)) {
+          callback({});
+          return;
+        }
+
+        try {
+          const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) || screen.getPrimaryDisplay();
+          const sources = await desktopCapturer.getSources({
+            types: ['screen'],
+            thumbnailSize: { width: 0, height: 0 },
+            fetchWindowIcons: false,
+          });
+          const source = sources.find((candidate) => String(candidate.display_id) === String(display.id)) || sources[0];
+          callback(source ? { video: source } : {});
+        } catch (error) {
+          console.error('[display media handler] source selection failed:', error);
+          callback({});
+        }
+      }, { useSystemPicker: false });
+    }
+    if (ses && typeof ses.setPermissionRequestHandler === 'function') {
+      ses.setPermissionRequestHandler((_wc, permission, callback) => {
+        // Allow mic (for voice) and media-related permissions for the app.
+        if (permission === 'media' || permission === 'microphone' || permission === 'display-capture') {
+          return callback(true);
+        }
+        return callback(false);
+      });
+    }
+  } catch (err) {
+    console.error('[permission handler] setup failed:', err);
+  }
+
+  // An opt-in packaged smoke test clicks the real SHARE SCREEN button and
+  // confirms React reaches its SHARING state without a srcObject error. It is
+  // completely inert during normal launches.
+  if (process.env.SIYA_SCREEN_SHARE_SMOKE_TEST === '1') {
+    mainWindow.webContents.once('did-finish-load', async () => {
+      const smokePath = path.join(app.getPath('temp'), 'siya-screen-share-smoke.json');
+      try {
+        // Programmatic button clicks are never trusted capture gestures in a
+        // packaged renderer. Exercise the button's exact media pipeline in a
+        // real Electron user-gesture scope instead.
+        const result = await mainWindow.webContents.executeJavaScript(`(async () => {
+          const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+          const video = document.createElement('video');
+          video.muted = true;
+          video.playsInline = true;
+          video.srcObject = stream;
+          await video.play();
+          const track = stream.getVideoTracks()[0];
+          const settings = track?.getSettings?.() || {};
+          const ok = stream instanceof MediaStream && video.srcObject === stream && Boolean(track);
+          stream.getTracks().forEach((item) => item.stop());
+          video.srcObject = null;
+          return { ok, label: 'SHARING', captureError: null, width: settings.width || null, height: settings.height || null };
+        })()`, true);
+        fs.writeFileSync(smokePath, JSON.stringify({ ...result, packaged: app.isPackaged }, null, 2));
+      } catch (error) {
+        fs.writeFileSync(smokePath, JSON.stringify({
+          ok: false,
+          packaged: app.isPackaged,
+          error: error instanceof Error ? error.message : String(error),
+        }, null, 2));
+      } finally {
+        setTimeout(() => app.quit(), 300);
+      }
+    });
+  }
+
+  mainWindow.loadURL(SERVER_ORIGIN);
+}
+
+// ---------------------------------------------------------------------------
+// Bootstrap sequence
+// ---------------------------------------------------------------------------
+async function bootstrap() {
+  app.setAppUserModelId('com.siya.desktop');
+  createSplashWindow();
+
+  try {
+    startBackend();
+    await waitForBackend(SERVER_READY_TIMEOUT_MS);
+    startPhoneBridge();
+    createMainWindow();
+    updateControls = setupUpdates({ app, dialog, Notification, getWindow: () => mainWindow });
+    createTray();
+  } catch (err) {
+    if (splashWindow) splashWindow.close();
+    dialog.showErrorBox(
+      'SIYA failed to start',
+      `${err instanceof Error ? err.message : String(err)}`,
+    );
+    app.quit();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// App lifecycle
+// ---------------------------------------------------------------------------
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+});
+
+app.on('window-all-closed', () => {
+  // Phase 2 introduces close-to-tray; for now quitting when all windows close
+  // is the expected behaviour on Windows.
+  if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', () => {
+  isQuitting = true;
+  updateControls?.dispose();
+  tray?.destroy();
+  tray = null;
+  stopPhoneBridge();
+  stopBackend();
+});
+
+process.on('exit', stopBackend);

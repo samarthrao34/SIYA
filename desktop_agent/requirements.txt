@@ -1,0 +1,13 @@
+# Linux port of SIYA's desktop agent. Install with:
+#   pip3 install --user --break-system-packages -r requirements.txt
+# (Arch/Omarchy's system Python is externally-managed; --user avoids sudo,
+# --break-system-packages is required to let pip install anyway. All
+# packages here are widely-used and low-risk.)
+fastapi>=0.141
+uvicorn[standard]>=0.52
+pydantic>=2.13
+psutil>=7.0
+pytesseract>=0.3.13
+Pillow>=12.0
+send2trash>=2.1
+bleak>=0.22

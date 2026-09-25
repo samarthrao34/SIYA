@@ -1,0 +1,19 @@
+/*
+ * Standalone mobile build's own Tailwind entry. Separate from ../src/index.css
+ * (shared with the desktop app) because this build's Vite root is mobile-app/,
+ * and Tailwind v4's automatic content detection anchors to that root -- it
+ * was missing classes used only inside ../src/character/* (CharacterStage,
+ * characterEngine), which live outside it. The explicit @source directive
+ * below fixes that.
+ */
+@import "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap";
+@import "tailwindcss";
+@source "../src";
+
+html[data-animations="off"] *,
+html[data-animations="off"] *::before,
+html[data-animations="off"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
