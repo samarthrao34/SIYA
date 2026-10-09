@@ -61,7 +61,6 @@ DESKTOP_TOOL_NAMES = [
     "systemInfo", "gpuInfo", "temperatureInfo",
     "brightnessUp", "brightnessDown", "setBrightness",
     "enableAutoStart", "disableAutoStart", "getAutoStartStatus",
-    "getHeartRate", "getBloodOxygen",
 ]
 
 _MODULE_NAMES = [
@@ -79,7 +78,6 @@ _MODULE_NAMES = [
     "tools_coding",
     "tools_system",
     "tools_startup",
-    "tools_health",
 ]
 
 

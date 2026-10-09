@@ -10,4 +10,3 @@ psutil>=7.0
 pytesseract>=0.3.13
 Pillow>=12.0
 send2trash>=2.1
-bleak>=0.22

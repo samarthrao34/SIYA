@@ -96,9 +96,7 @@ export class LiveSession {
       (this.onToolCall = i.onToolCall),
       (this.onError = i.onError),
       (this.onMemorySync = i.onMemorySync),
-      (this.onScreenVisionState = i.onScreenVisionState),
-      (this.onHealthReading = i.onHealthReading),
-      (this.onHealthSyncStatus = i.onHealthSyncStatus));
+      (this.onScreenVisionState = i.onScreenVisionState));
   }
   setState(i) {
     ((this.currentState = i), this.onStateChange(i));
@@ -373,13 +371,6 @@ export class LiveSession {
                   r.memories &&
                   this.onMemorySync &&
                   this.onMemorySync(r.memories),
-                r.type === "health_reading" &&
-                  r.reading &&
-                  this.onHealthReading &&
-                  this.onHealthReading(r.reading),
-                r.type === "health_sync_status" &&
-                  this.onHealthSyncStatus &&
-                  this.onHealthSyncStatus(r.tool, r.status, r.error),
                 r.type === "toolCall")
               ) {
                 const { callId: h, name: f, args: d } = r;

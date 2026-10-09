@@ -1,6 +1,6 @@
 /*
  * Encryption at rest for SIYA's personal data (memories, feelings, goals,
- * health readings, session state).
+ * session state).
  *
  * AES-256-GCM with a per-install key. electron/main.cjs creates the key once,
  * keeps it in the OS keyring via Electron safeStorage, and hands it to this

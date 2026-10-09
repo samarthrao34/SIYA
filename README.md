@@ -43,7 +43,6 @@ speech) can replace Gemini entirely.
 | **Cognition** | An autonomous layer for attention, goals, planning, curiosity, social initiative, proactive check-ins, and a critic that reviews tool use. |
 | **Desktop control** | 60+ tools through a local Python agent: apps and windows, files, mouse and keyboard, clipboard, screenshots and OCR, volume and brightness, web search, and power actions with two-step confirmation. |
 | **Screen vision** | "Look at my screen" captures the display and feeds it to the model so it can answer about what you're seeing. |
-| **Wellbeing** | Smartwatch heart-rate / SpO₂ sync over BLE with a health dashboard, plus a deterministic crisis-language safety net (English, Hinglish, Devanagari) that surfaces helplines. |
 | **API hub** | Imports the public-APIs catalogue, health-checks providers, and runs verified adapters as tools. |
 | **Offline brain** | Optional local mode: Gemma 4 via LiteRT-LM, Silero VAD and Kokoro / Edge TTS. Same tools, memory and avatar. |
 | **Mobile** | A standalone Android app with the same avatar and persona that talks to Gemini directly from the phone. |
@@ -61,7 +60,7 @@ flowchart LR
   Server <-- "HTTP :8765" --> Agent["Desktop agent<br/>services/desktop_agent (FastAPI)"]
   Server <-. "local brain mode" .-> Voice["Local voice<br/>services/local_voice (VAD + TTS)"]
   Server <-. "local brain mode" .-> LLM[(Gemma via LiteRT-LM)]
-  Agent --> OS["OS: windows, files, input,<br/>screen, BLE watch"]
+  Agent --> OS["OS: windows, files,<br/>input, screen"]
   Phone["Android app<br/>mobile/"] <-- "Gemini Live" --> Gemini
   Phone <-. "memory API (adb reverse)" .-> Server
 ```
@@ -72,6 +71,60 @@ session, memory, cognition, safety and screen vision, and it auto-spawns the
 Python desktop agent. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for a
 deeper walkthrough.
 
+## Roadmap: a physical body for SIYA
+
+SIYA lives on screen today. We are building a **physical robot** so she can
+share your space as well: a head that looks at you, a face that shows what she
+feels, and arms that gesture while she talks. This is active, ongoing work.
+The architecture below is the plan we are building towards; none of the robot
+side ships yet.
+
+The idea is that the robot is **a second body for the same SIYA**, not a
+separate product. The brain, memory, personality and safety stay in the
+existing backend. The animation signals that drive the 3D avatar today
+(speaking state, lip-sync visemes, expressions, gaze, gestures; see
+`shared/runtime/`) will drive motors as well.
+
+```mermaid
+flowchart LR
+  subgraph Today["Today"]
+    Brain["SIYA backend<br/>server/<br/>(conversation, memory,<br/>cognition, safety)"]
+    Events["Avatar events<br/>shared/runtime/<br/>state · visemes ·<br/>expression · gaze · gesture"]
+    Avatar["3D avatar<br/>src/character/"]
+    Brain --> Events --> Avatar
+  end
+
+  subgraph Future["In development: physical body"]
+    Bridge["Embodiment bridge<br/>(planned server module)"]
+    Controller["Robot controller<br/>(onboard)"]
+    Motion["Head & neck · arms & hands"]
+    Face["Expressive face"]
+    Senses["Camera · microphones · touch"]
+    Safety["Motion safety<br/>limits · e-stop · consent"]
+    Bridge --> Controller
+    Controller --> Motion
+    Controller --> Face
+    Senses --> Controller
+    Safety -.- Controller
+  end
+
+  Events -. "same event stream" .-> Bridge
+  Controller -. "what the robot<br/>sees and hears" .-> Brain
+```
+
+### Milestones
+
+| # | Milestone | What it unlocks |
+| --- | --- | --- |
+| 1 | **Embodiment protocol** | A versioned, transport-neutral event stream (state, speech timing, visemes, expressions, gaze, gestures) published from the backend, so any body can subscribe. |
+| 2 | **Head and face** | Physical lip-sync, gaze that follows you, and facial expressions, all driven by the same events as the 3D avatar. |
+| 3 | **Embodied perception** | The robot's own camera and microphones feed SIYA's existing emotion, behaviour and voice pipelines. |
+| 4 | **Gesture and motion** | Arm and hand gestures timed to speech, reusing the avatar's procedural gesture system. |
+| 5 | **Safety and autonomy** | Hard motion limits, an emergency stop, consent rules for movement, and proactive presence in the room. |
+
+Hardware choices are still being evaluated and will be documented as each
+milestone lands.
+
 ## Repository layout
 
 ```
@@ -79,7 +132,7 @@ SIYA/
 ├── src/                    Desktop UI (React 19 + Vite + Tailwind 4)
 │   ├── api/                Live session client (audio in/out, reconnect, tool events)
 │   ├── character/          Three.js character engine, VRM loader, SIYA's preset
-│   ├── components/         Main experience and panels (Settings, Memories, Health, Privacy…)
+│   ├── components/         Main experience and panels (Settings, Memories, Themes, Privacy…)
 │   ├── settings/           Settings store and wake-word listener
 │   └── vision/             On-device emotion and behaviour analysis (MediaPipe)
 ├── server/                 Node backend (Express + ws), bundled to dist/server.cjs
@@ -90,7 +143,6 @@ SIYA/
 │   ├── memory.ts           Long-term memory storage and consolidation
 │   ├── safety.ts           Crisis-language detection and helplines
 │   ├── screenVision.ts     Screen capture → model pipeline
-│   ├── health.ts           Wearable health readings store
 │   ├── secureStore.ts      AES-256-GCM encryption at rest
 │   └── …                   paths, liveAudio, textEmotion
 ├── shared/                 Code shared by UI, mobile and server
@@ -119,8 +171,8 @@ SIYA/
 - **Node.js 20+** (22 recommended) and npm
 - **Python 3.10+** for the desktop agent (and the optional local voice service)
 - A **Gemini API key** from [Google AI Studio](https://aistudio.google.com/apikey)
-- Linux desktop control targets **Hyprland** (`hyprctl`). Other tools need
-  `tesseract` for OCR and BlueZ for the smartwatch.
+- Linux desktop control targets **Hyprland** (`hyprctl`). OCR tools need
+  `tesseract`.
 
 ### Install
 
@@ -199,7 +251,7 @@ Conventions:
   machine to Gemini with your own key. The two optional services that send
   text elsewhere (TypeSafe text-emotion, Edge TTS in local mode) are marked
   in `.env.example` and can be turned off.
-- **Encrypted at rest.** Memories, goals, health readings and session state
+- **Encrypted at rest.** Memories, goals and session state
   are encrypted with AES-256-GCM. The key is sealed in the OS keyring via
   Electron `safeStorage`.
 - **On-device perception.** Camera frames are analysed locally. Only derived

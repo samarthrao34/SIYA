@@ -62,7 +62,7 @@ export function PrivacyCenter() {
             </div>
             <ul className="list-disc space-y-2 pl-5 text-white/70">
               <li>
-                SIYA's memories of you, your moods, goals and health readings are stored only on this computer
+                SIYA's memories of you, your moods and goals are stored only on this computer
                 {encrypted ? ", encrypted." : "."}
               </li>
               <li>
@@ -80,7 +80,7 @@ export function PrivacyCenter() {
             <div className="mt-6 rounded-2xl border border-rose-400/20 bg-rose-500/[0.06] p-4">
               <div className="font-medium text-white">Delete all my data</div>
               <p className="mt-1 text-white/60">
-                Erases everything SIYA remembers about you, your health readings and logs. This cannot be undone.
+                Erases everything SIYA remembers about you and her logs. This cannot be undone.
               </p>
               {error && <p className="mt-2 text-rose-300">{error}</p>}
               {!confirming ? (

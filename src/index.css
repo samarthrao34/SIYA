@@ -15,7 +15,7 @@ html[data-animations="off"] *::after {
 }
 
 /*
- * Dusk skin: restyles the recovered sci-fi panels (Themes, Health, Memories,
+ * Dusk skin: restyles the recovered sci-fi panels (Themes, Memories,
  * Settings, screen/camera cards) to match the calm Dusk theme. Applied for
  * every theme via the root's data-skin="dusk"; themes only change the backdrop.
  */

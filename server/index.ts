@@ -30,19 +30,6 @@ import {
   clearGeminiApiKey,
 } from "./paths";
 import {
-  HealthReading,
-  HealthRange,
-  isHealthRange,
-  appendHealthReading,
-  loadAllHealthReadings,
-  loadHealthReadings,
-  healthSummary,
-  downsample,
-  toCsv,
-  deleteHealthHistory,
-  reencryptHealthHistory,
-} from "./health";
-import {
   CognitiveRuntime,
   DesktopPerception,
   GoalPlanner,
@@ -126,7 +113,7 @@ function sanitizeSpokenModelText(value: unknown): string {
 // ---------------------------------------------------------------------------
 const DESKTOP_AGENT_URL = process.env.DESKTOP_AGENT_URL || "http://127.0.0.1:8765";
 const DESKTOP_OBSERVER_FALLBACK_URL = process.env.DESKTOP_OBSERVER_URL || "http://127.0.0.1:8766";
-const DESKTOP_AGENT_TIMEOUT = 32_000; // ms -- headroom above tools_health.py's own 20s ceiling
+const DESKTOP_AGENT_TIMEOUT = 32_000; // ms -- headroom for slow tools (OCR, screenshots, scripts)
 let desktopObserverUrl: string | null = null;
 let desktopObserverResolutionComplete = false;
 
@@ -163,8 +150,6 @@ const DESKTOP_TOOLS: ReadonlySet<string> = new Set([
   "brightnessUp", "brightnessDown", "setBrightness",
   // auto-start management (V2)
   "enableAutoStart", "disableAutoStart", "getAutoStartStatus",
-  // paired smartwatch health data
-  "getHeartRate", "getBloodOxygen",
 ]);
 
 const API_HUB_TOOLS: ReadonlySet<string> = new Set([
@@ -173,19 +158,6 @@ const API_HUB_TOOLS: ReadonlySet<string> = new Set([
   "checkApiProvider",
   "callVerifiedApiAdapter",
   "convertCurrency",
-]);
-
-/**
- * Local health-history query tools. Unlike getHeartRate/getBloodOxygen
- * (which are DESKTOP_TOOLS routed to the Python agent for a live BLE sync),
- * these read straight from server/health.ts's local store -- fast, and
- * privacy-scoped: only summarized/range-bounded data ever reaches the model,
- * never the full stored history in one shot.
- */
-const HEALTH_QUERY_TOOLS: ReadonlySet<string> = new Set([
-  "getHealthSummary",
-  "getHeartRateHistory",
-  "getSpO2History",
 ]);
 
 /**
@@ -204,25 +176,6 @@ let desktopAgentVerified = false;
  * the `/api/screen-vision` HTTP endpoint can locate the right pipeline.
  */
 const activeScreenVisionPipelines = new Map<string, ScreenVisionPipeline>();
-
-/**
- * Registry of connected live-session sockets, keyed by connectionId. Lets the
- * background health-data collector push a `health_reading` message to
- * whatever browser window is currently open, without turning the /live
- * WebSocket into a general pub/sub bus.
- */
-const activeClientSockets = new Map<string, WebSocket>();
-
-function broadcastHealthReading(reading: HealthReading): void {
-  const payload = JSON.stringify({ type: "health_reading", reading });
-  for (const socket of activeClientSockets.values()) {
-    try {
-      if (socket.readyState === socket.OPEN) socket.send(payload);
-    } catch {
-      /* best-effort; a dead socket will be cleaned up on its own close event */
-    }
-  }
-}
 
 interface ElectronScreenCaptureResponse {
   type: "screen-capture-response";
@@ -513,79 +466,6 @@ async function callDesktopAgent(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Background wearable health-data collector.
-//
-// Polls the paired watch (via the desktop agent's live-BLE getHeartRate /
-// getBloodOxygen tools) on an interval, and persists+broadcasts anything
-// genuinely new. The watch itself only logs a fresh auto-test reading every
-// ~15 minutes, so this polls a bit faster than that to catch new data soon
-// after it appears without hammering the Bluetooth radio.
-// ---------------------------------------------------------------------------
-const HEALTH_POLL_INTERVAL_MS = 5 * 60 * 1000;
-let healthCollectorTimer: NodeJS.Timeout | null = null;
-
-/**
- * Persist a freshly-fetched live reading if it's new (not the same value at
- * the same watch-side timestamp as the last stored one), and broadcast it.
- * Shared by the background poller, the manual dashboard sync, AND SIYA's
- * own conversational getHeartRate/getBloodOxygen tool calls -- a reading she
- * fetches to answer "what's my heart rate" should count as a real
- * measurement, not disappear the moment she finishes speaking it.
- */
-function recordLiveReadingIfNew(
-  field: "heartRate" | "spo2",
-  value: number,
-  timeOfDay: string | undefined,
-): HealthReading | null {
-  const existing = loadAllHealthReadings();
-  const last = [...existing].reverse().find((r) => typeof r[field] === "number");
-  if (last && last[field] === value && last.timestamp.slice(-8) === timeOfDay) {
-    return null;
-  }
-  const reading: HealthReading = { timestamp: new Date().toISOString(), [field]: value } as HealthReading;
-  appendHealthReading(reading);
-  broadcastHealthReading(reading);
-  return reading;
-}
-
-async function pollWatchOnce(): Promise<HealthReading[]> {
-  const newReadings: HealthReading[] = [];
-
-  try {
-    const hrResult = await callDesktopAgent("getHeartRate", {});
-    const bpm = hrResult.ok ? (hrResult.result as any)?.bpm : undefined;
-    const timeOfDay = hrResult.ok ? (hrResult.result as any)?.time_of_day : undefined;
-    if (typeof bpm === "number") {
-      const reading = recordLiveReadingIfNew("heartRate", bpm, timeOfDay);
-      if (reading) newReadings.push(reading);
-    }
-  } catch (e: any) {
-    logError(`HEALTH_POLL_HEARTRATE_FAILED: ${e?.message || e}`);
-  }
-
-  try {
-    const spo2Result = await callDesktopAgent("getBloodOxygen", {});
-    const spo2 = spo2Result.ok ? (spo2Result.result as any)?.spo2_percent : undefined;
-    const timeOfDay = spo2Result.ok ? (spo2Result.result as any)?.time_of_day : undefined;
-    if (typeof spo2 === "number") {
-      const reading = recordLiveReadingIfNew("spo2", spo2, timeOfDay);
-      if (reading) newReadings.push(reading);
-    }
-  } catch (e: any) {
-    logError(`HEALTH_POLL_SPO2_FAILED: ${e?.message || e}`);
-  }
-
-  return newReadings;
-}
-
-function startHealthCollector(): void {
-  if (healthCollectorTimer) return;
-  void pollWatchOnce();
-  healthCollectorTimer = setInterval(() => void pollWatchOnce(), HEALTH_POLL_INTERVAL_MS);
-  healthCollectorTimer.unref?.();
-}
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -612,7 +492,6 @@ async function startServer() {
       if (legacyMemoriesAtBoot.length > 0) await saveMemories(legacyMemoriesAtBoot);
       await cognition.memories.persistNow();
       await cognition.goals.persistNow();
-      reencryptHealthHistory();
     } catch (error) {
       logError(`ENCRYPT_EXISTING_DATA_FAILED: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -1040,79 +919,6 @@ async function startServer() {
   });
 
   // ---------------------------------------------------------------------------
-  // Wearable health-data REST API. Mirrors the memories/settings pattern:
-  // reads/writes go through server/health.ts's local JSON-lines store, never
-  // through the live BLE watch connection directly (that's what the
-  // background collector and the /api/health/sync "refresh now" route are
-  // for) -- so the dashboard stays fast even when the watch is out of range.
-  // ---------------------------------------------------------------------------
-  function parseHealthRange(req: express.Request): HealthRange {
-    const raw = req.query.range;
-    return isHealthRange(raw) ? raw : "today";
-  }
-
-  app.get("/api/health/latest", (_req, res) => {
-    try {
-      const readings = loadAllHealthReadings();
-      const lastHr = [...readings].reverse().find((r) => typeof r.heartRate === "number") || null;
-      const lastSpo2 = [...readings].reverse().find((r) => typeof r.spo2 === "number") || null;
-      res.json({ heartRate: lastHr, spo2: lastSpo2 });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.get("/api/health/history", (req, res) => {
-    try {
-      const range = parseHealthRange(req);
-      const maxPoints = Math.min(Number(req.query.maxPoints) || 500, 2000);
-      const readings = downsample(loadHealthReadings(range), maxPoints);
-      res.json({ range, readings });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.get("/api/health/summary", (req, res) => {
-    try {
-      res.json(healthSummary(parseHealthRange(req)));
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.get("/api/health/export", (req, res) => {
-    try {
-      const range = parseHealthRange(req);
-      const format = req.query.format === "json" ? "json" : "csv";
-      const readings = loadHealthReadings(range);
-      const stamp = new Date().toISOString().slice(0, 10);
-      if (format === "json") {
-        res.setHeader("Content-Disposition", `attachment; filename="siya-health-${range}-${stamp}.json"`);
-        res.setHeader("Content-Type", "application/json");
-        res.send(JSON.stringify({ range, exportedAt: new Date().toISOString(), readings }, null, 2));
-      } else {
-        res.setHeader("Content-Disposition", `attachment; filename="siya-health-${range}-${stamp}.csv"`);
-        res.setHeader("Content-Type", "text/csv");
-        res.send(toCsv(readings));
-      }
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // Manual "refresh now" -- triggers an immediate live BLE sync instead of
-  // waiting for the next background poll. Same dedup/broadcast path.
-  app.post("/api/health/sync", async (_req, res) => {
-    try {
-      const newReadings = await pollWatchOnce();
-      res.json({ synced: newReadings.length, readings: newReadings });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  // ---------------------------------------------------------------------------
   // Kimodo motion service proxy. The service itself binds only to the
   // server's Tailscale-private IP (never public/LAN); the frontend never
   // talks to it directly -- everything goes through this Node proxy, same
@@ -1307,7 +1113,8 @@ async function startServer() {
       await cognition.memories.forgetAll();
       await cognition.goals.forgetAll();
       await saveMemories([]);
-      deleteHealthHistory();
+      // Readings stored by the retired smartwatch feature, if any remain.
+      fs.rmSync(dataFile("health_history.jsonl"), { force: true });
       const cognitionDir = path.join(COGNITION_DATA_DIR, "cognition");
       for (const name of fs.existsSync(cognitionDir) ? fs.readdirSync(cognitionDir) : []) {
         if (name === "last-session.json" || name.includes(".corrupt-") || name.endsWith(".tmp")) {
@@ -1831,7 +1638,6 @@ async function startServer() {
   wss.on("connection", async (clientWs) => {
     console.log("Client WebSocket connected to /live");
     const connectionId = randomUUID();
-    activeClientSockets.set(connectionId, clientWs);
     /**
      * One screen-vision pipeline per live connection. The pipeline is bound
      * to the Gemini Live session object (set below) once `ai.live.connect`
@@ -1983,8 +1789,6 @@ async function startServer() {
         "   - BROWSER INTERACTION: After a site opens in the default browser, use viewScreen/readScreen and the generic mouse/keyboard tools to interact with what TECH can actually see.\n" +
         "   - CODING ASSISTANCE: Use 'createPythonFile', 'writeCodeFile' (any language), 'createProjectFolder' (with subfolders), 'runPythonScript' (captures output). Example: 'Create and run a hello world Python script' -> createPythonFile then runPythonScript, then read back the output naturally.\n" +
         "   - SYSTEM INFORMATION: Use 'systemInfo' (CPU/RAM/disk/uptime), 'gpuInfo' (NVIDIA stats), 'temperatureInfo' to answer 'How is my CPU usage?' or 'What's my GPU temperature?'.\n" +
-        "   - WEARABLE HEALTH DATA: Use 'getHeartRate' or 'getBloodOxygen' to answer 'What's my heart rate?' or 'Check my oxygen level' right now -- these sync live from the user's paired smartwatch over Bluetooth and can take several seconds, so narrate that you're checking. Use 'getHealthSummary', 'getHeartRateHistory', or 'getSpO2History' for trend questions like 'how has my heart rate changed today?' or 'what was my average oxygen this week?' -- these read from locally stored history and are fast. If a tool reports no recent reading, say so plainly rather than guessing a number.\n" +
-        "   - MEDICAL SAFETY: You may describe recorded values and trends (e.g. 'your recorded heart rate has been higher than your recent average'), but you are NOT a doctor and must NEVER diagnose a medical condition from this data (never say things like 'you have a heart condition'). Wearable sensor readings can be inaccurate. For any measurement that looks concerning, say so plainly, note that consumer sensors can be imperfect, and encourage the user to get it checked by a real medical professional -- don't alarm them, and don't reassure them either; just describe what the data shows.\n" +
         "   - CRITICAL: Always describe what you're doing in your warm, in-character voice WHILE the tool runs. If a desktop tool returns an error (especially 'Desktop agent is not running'), gently tell TECH that the desktop control agent needs to be started (uvicorn desktop_agent.main:app --port 8765). Chain multi-step desktop plans naturally without waiting between steps.\n" +
         "11. BRIGHTNESS & AUTO-START (V2):\n" +
         "   - BRIGHTNESS: Use 'brightnessUp', 'brightnessDown', 'setBrightness' when the user asks to change screen brightness. Respond naturally: 'Alright, I've turned up the brightness for you.'\n" +
@@ -2636,46 +2440,6 @@ async function startServer() {
                   description: "Get available temperature readings (CPU, GPU, etc.). Best-effort; depends on the sensors available.",
                   parameters: { type: Type.OBJECT, properties: {} }
                 },
-                {
-                  name: "getHeartRate",
-                  description: "Get the user's latest heart rate (BPM) from their paired LAXASFIT smartwatch over Bluetooth. Use when asked 'what's my heart rate' / 'check my pulse' / similar. Syncs live from the watch, so this can take several seconds; may report no recent reading if the watch's periodic auto-test hasn't logged one yet.",
-                  parameters: { type: Type.OBJECT, properties: {} }
-                },
-                {
-                  name: "getBloodOxygen",
-                  description: "Get the user's latest blood oxygen (SpO2 %) from their paired LAXASFIT smartwatch over Bluetooth. Use when asked 'what's my oxygen level' / 'check my SpO2' / similar. Syncs live from the watch, so this can take several seconds; may report no recent reading if the watch's periodic auto-test hasn't logged one yet.",
-                  parameters: { type: Type.OBJECT, properties: {} }
-                },
-                {
-                  name: "getHealthSummary",
-                  description: "Get statistics (latest, min, max, average, reading count) for the user's heart rate and blood oxygen over a time range, from SIYA's locally stored health history (fast, no live watch sync). Use for questions like 'how has my heart rate changed today?' or 'what was my average oxygen this week?'.",
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                      range: { type: Type.STRING, enum: ["live", "1h", "today", "7d", "30d", "all"], description: "Time range to summarize. Default 'today'." },
-                    },
-                  },
-                },
-                {
-                  name: "getHeartRateHistory",
-                  description: "Get a list of the user's recorded heart rate readings (timestamp + BPM) over a time range, from SIYA's locally stored health history. Use when the user wants to see or discuss a trend, not just a single number.",
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                      range: { type: Type.STRING, enum: ["live", "1h", "today", "7d", "30d", "all"], description: "Time range. Default 'today'." },
-                    },
-                  },
-                },
-                {
-                  name: "getSpO2History",
-                  description: "Get a list of the user's recorded blood oxygen (SpO2 %) readings (timestamp + percentage) over a time range, from SIYA's locally stored health history.",
-                  parameters: {
-                    type: Type.OBJECT,
-                    properties: {
-                      range: { type: Type.STRING, enum: ["live", "1h", "today", "7d", "30d", "all"], description: "Time range. Default 'today'." },
-                    },
-                  },
-                },
                 // --- V2: Brightness control ---
                 {
                   name: "brightnessUp",
@@ -3004,35 +2768,11 @@ async function startServer() {
                       }],
                     });
                   })();
-                } else if (HEALTH_QUERY_TOOLS.has(fc.name)) {
-                  (async () => {
-                    const rawRange = (fc.args as any)?.range;
-                    const range: HealthRange = isHealthRange(rawRange) ? rawRange : "today";
-                    let output: unknown;
-                    if (fc.name === "getHealthSummary") {
-                      output = healthSummary(range);
-                    } else {
-                      const field = fc.name === "getHeartRateHistory" ? "heartRate" : "spo2";
-                      const points = downsample(loadHealthReadings(range), 50)
-                        .filter((r) => typeof (r as any)[field] === "number")
-                        .map((r) => ({ timestamp: r.timestamp, value: (r as any)[field] as number }));
-                      output = { range, field, count: points.length, points };
-                    }
-                    session.sendToolResponse({
-                      functionResponses: [{ name: fc.name, response: { output }, id: fc.id }],
-                    });
-                  })();
                 } else if (DESKTOP_TOOLS.has(fc.name) || API_HUB_TOOLS.has(fc.name)) {
                   // Permission-bound backend tools. Desktop actions route to
                   // Python; API discovery stays inside the local API hub.
                   (async () => {
                     console.log(`[SIYA Tool] Routing ${fc.name} through safety policy...`);
-                    const isWatchSync = fc.name === "getHeartRate" || fc.name === "getBloodOxygen";
-                    if (isWatchSync) {
-                      try {
-                        clientWs.send(JSON.stringify({ type: "health_sync_status", tool: fc.name, status: "checking" }));
-                      } catch {}
-                    }
                     const execution = await toolExecutor.execute(
                       fc.name,
                       fc.args as Record<string, unknown>,
@@ -3041,27 +2781,6 @@ async function startServer() {
                         projectRoot: process.env.SIYA_APP_ROOT || process.cwd(),
                       },
                     );
-                    if (isWatchSync) {
-                      try {
-                        clientWs.send(JSON.stringify({
-                          type: "health_sync_status",
-                          tool: fc.name,
-                          status: execution.success ? "success" : "error",
-                          error: execution.success ? undefined : execution.error,
-                        }));
-                      } catch {}
-                      // Persist whatever SIYA just fetched live -- otherwise a
-                      // reading she spoke in conversation was never recorded
-                      // for the dashboard or her own history/summary tools.
-                      if (execution.success) {
-                        const resultObj = execution.result as any;
-                        if (fc.name === "getHeartRate" && typeof resultObj?.bpm === "number") {
-                          recordLiveReadingIfNew("heartRate", resultObj.bpm, resultObj.time_of_day);
-                        } else if (fc.name === "getBloodOxygen" && typeof resultObj?.spo2_percent === "number") {
-                          recordLiveReadingIfNew("spo2", resultObj.spo2_percent, resultObj.time_of_day);
-                        }
-                      }
-                    }
                     const verification = critic.verifyToolResult(execution);
                     let output: any = execution.status === "confirmation_required"
                       ? {
@@ -3658,7 +3377,6 @@ async function startServer() {
       
       clientWs.on("close", () => {
         console.log("Client disconnected, closing Gemini session");
-        activeClientSockets.delete(connectionId);
         unsubscribeInitiative();
         screenVision?.dispose();
         forgetScreenVision();
@@ -3721,7 +3439,6 @@ async function startServer() {
       .then(async () => {
         await ensureDesktopObserver();
         if (cognition.config.desktopAwarenessEnabled && desktopObserverUrl) desktopPerception.start();
-        startHealthCollector();
       })
       .catch((e) => console.warn(`[Desktop Agent] Boot probe failed: ${e?.message || e}`));
   });

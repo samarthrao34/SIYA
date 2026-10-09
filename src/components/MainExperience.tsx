@@ -657,14 +657,6 @@ export function MainExperience() {
         (console.log("[App] WebSocket memories sync triggered:", q),
           Array.isArray(q) && Se(q));
       },
-      onHealthReading: (q) => {
-        window.dispatchEvent(new CustomEvent("siya:health_reading", { detail: q }));
-      },
-      onHealthSyncStatus: (tool, status, error) => {
-        window.dispatchEvent(
-          new CustomEvent("siya:health_sync_status", { detail: { tool, status, error } }),
-        );
-      },
       onScreenVisionState: (q, gt) => {
         (m(q),
           gt != null && gt.error

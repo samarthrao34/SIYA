@@ -1,6 +1,6 @@
 // Siya's persona for the standalone mobile build. Trimmed from server/index.ts's
 // capabilityInstructions + presenceInstructions: drops every desktop-only
-// capability (screen sharing, window/clipboard/app control, health wearables)
+// capability (screen sharing, window/clipboard/app control)
 // since none of those exist on a phone with no backend. Identity, personality,
 // and language rules are kept verbatim so she's recognizably the same Siya.
 //
