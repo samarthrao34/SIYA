@@ -36,7 +36,20 @@ cp -r "$MOBILE_DIR/webapp-dist/." "$ASSETS_DIR/www/"
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR/compiled" "$OUTPUT_DIR/generated" "$OUTPUT_DIR/classes" "$OUTPUT_DIR/dex"
 
-"$TOOLS/aapt2" compile --dir "$SOURCE_DIR/res" -o "$OUTPUT_DIR/compiled/resources.zip"
+# The private memory server's host is allowed cleartext HTTP (it is only
+# reachable inside the tailnet). It lives in mobile/app/.env, not in git, so
+# patch it into a build-local copy of res/.
+MEMORY_URL="$(sed -n 's/^VITE_SIYA_MEMORY_URL=//p' "$PROJECT_DIR/mobile/app/.env" 2>/dev/null | tail -n1)"
+MEMORY_HOST="$(printf '%s' "$MEMORY_URL" | sed -E 's#^[a-zA-Z]+://##; s#[:/].*$##')"
+cp -r "$SOURCE_DIR/res" "$OUTPUT_DIR/res"
+if [[ -n "$MEMORY_HOST" ]]; then
+  sed -i "s#SIYA_MEMORY_HOST#$MEMORY_HOST#" "$OUTPUT_DIR/res/xml/network_security_config.xml"
+else
+  echo "warning: VITE_SIYA_MEMORY_URL not set in mobile/app/.env; memory will be disabled" >&2
+  sed -i "/SIYA_MEMORY_HOST/d" "$OUTPUT_DIR/res/xml/network_security_config.xml"
+fi
+
+"$TOOLS/aapt2" compile --dir "$OUTPUT_DIR/res" -o "$OUTPUT_DIR/compiled/resources.zip"
 "$TOOLS/aapt2" link \
   -I "$ANDROID_JAR" \
   --manifest "$SOURCE_DIR/AndroidManifest.xml" \

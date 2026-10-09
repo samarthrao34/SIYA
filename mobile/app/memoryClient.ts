@@ -1,19 +1,21 @@
-// Client for Siya's private memory graph ("Samarth ke Papa") -- an isolated
-// instance of the user's own deterministic markdown-graph retrieval server
-// (brain.js: BM25 + heading/path match + recency + PageRank centrality +
-// pointer-hop graph walk over [[wikilinks]], no embeddings, no LLM in the
-// retrieval path). Runs on their Tailscale-only server at <private-memory-host>:20141,
-// a separate process/port/token/corpus from their other assistants' memory
-// (Brahma/Disha/Zara) -- nothing written here is ever visible to those, and
-// nothing of theirs is visible here. Reachable only from devices on the same
-// tailnet (the phone needs Tailscale signed into the same account), which is
-// the privacy boundary: this token alone is not a public secret, but it can
-// only be used by a device already inside that private mesh.
+// Client for Siya's private memory graph: a self-hosted markdown-graph
+// retrieval server (BM25 + heading/path match + recency + graph walk, no
+// embeddings, no LLM in the retrieval path). It is meant to be reachable only
+// over a private network such as a Tailscale tailnet.
+//
+// The server address and bearer token come from mobile/app/.env at build time
+// (see mobile/app/.env.example) and are never hardcoded in source. Without
+// them, memory calls fail fast and the app keeps working without memory.
 
-const MEMORY_BASE = "http://<private-memory-host>:20141";
-// Injected at build time from mobile/app/.env (VITE_SIYA_BRAIN_TOKEN) -- never
-// hardcoded in source. See docs/README.md for how to regenerate/rotate it.
+const MEMORY_BASE = (import.meta.env.VITE_SIYA_MEMORY_URL || "").replace(/\/$/, "");
 const MEMORY_TOKEN = import.meta.env.VITE_SIYA_BRAIN_TOKEN || "";
+
+function memoryUrl(path: string): string {
+  if (!MEMORY_BASE || !MEMORY_TOKEN) {
+    throw new Error("Memory server not configured (VITE_SIYA_MEMORY_URL / VITE_SIYA_BRAIN_TOKEN)");
+  }
+  return MEMORY_BASE + path;
+}
 
 function authHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${MEMORY_TOKEN}`, "Content-Type": "application/json" };
@@ -38,7 +40,7 @@ const PROFILE_PATH = "people/samarth-ke-papa.md";
 
 /** Shared ingest+reindex, used by both a fresh event card and a profile merge. */
 async function ingestAndReindex(path: string, content: string): Promise<{ ok: boolean; error?: string }> {
-  const ingestRes = await fetch(`${MEMORY_BASE}/ingest`, {
+  const ingestRes = await fetch(memoryUrl("/ingest"), {
     method: "POST",
     headers: authHeaders(),
     body: JSON.stringify({ path, content }),
@@ -49,7 +51,7 @@ async function ingestAndReindex(path: string, content: string): Promise<{ ok: bo
     console.error(`[Memory] ingest failed: HTTP ${ingestRes.status} ${text}`);
     return { ok: false, error: `ingest ${ingestRes.status}` };
   }
-  const reindexRes = await fetch(`${MEMORY_BASE}/reindex`, { method: "POST", headers: authHeaders(), signal: AbortSignal.timeout(15000) }).catch((err) => {
+  const reindexRes = await fetch(memoryUrl("/reindex"), { method: "POST", headers: authHeaders(), signal: AbortSignal.timeout(15000) }).catch((err) => {
     console.error("[Memory] reindex request failed:", err);
     return null;
   });
@@ -94,7 +96,7 @@ const FACTS_HEADING = "## Known facts";
  */
 export async function updateProfileFact(fact: string): Promise<{ ok: boolean; error?: string; skipped?: boolean }> {
   try {
-    const rawRes = await fetch(`${MEMORY_BASE}/raw?path=${encodeURIComponent(PROFILE_PATH)}`, {
+    const rawRes = await fetch(memoryUrl(`/raw?path=${encodeURIComponent(PROFILE_PATH)}`), {
       headers: authHeaders(),
       signal: AbortSignal.timeout(8000),
     });
@@ -144,7 +146,7 @@ export interface RecalledChunk {
 /** Graph-aware retrieval: returns only the chunks relevant to `query`, not the whole corpus. */
 export async function recallMemory(query: string, budget = 2500): Promise<RecalledChunk[]> {
   try {
-    const res = await fetch(`${MEMORY_BASE}/query`, {
+    const res = await fetch(memoryUrl("/query"), {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({ q: query, budget, depth: 2 }),

@@ -3,7 +3,8 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">127.0.0.1</domain>
         <domain includeSubdomains="false">localhost</domain>
-        <!-- Siya's private memory server (brain-siya), Tailscale-only address. -->
-        <domain includeSubdomains="false"><private-memory-host></domain>
+        <!-- Private memory server host, filled in from VITE_SIYA_MEMORY_URL by
+             mobile/build-mobile.sh. Keep the placeholder in source control. -->
+        <domain includeSubdomains="false">SIYA_MEMORY_HOST</domain>
     </domain-config>
 </network-security-config>
