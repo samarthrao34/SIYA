@@ -39,7 +39,8 @@ mic (pcm-capture-worklet) ─► src/api/liveSession.ts ─► ws /live ─► s
   and broadcasts avatar events on `shared/runtime/avatarEvents.js`.
 - **Camera**: `src/vision/emotionDetector.ts` (face blendshapes) and
   `src/vision/behaviorAnalyzer.ts` (face + hands over time) run MediaPipe
-  locally. Only the resulting labels are sent to the backend.
+  locally. The labels ride along with a camera still sent every 2.5 s, and
+  both reach the model in Gemini mode (see [DATA_FLOWS.md](DATA_FLOWS.md)).
 - **Tools** declared to the model are routed by `server/index.ts`: desktop
   tools go to the Python agent, API tools to `server/api-hub`, memory tools to
   `server/memory.ts`. Dangerous power actions need a confirmation token from

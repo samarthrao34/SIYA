@@ -1104,8 +1104,17 @@ async function startServer() {
   // encryption key are kept. The client reloads afterwards, which also ends
   // the live session holding the current conversation.
   // ---------------------------------------------------------------------------
+  // Everything the consent screen and Privacy Center need to describe the data
+  // flows that are actually active (docs/DATA_FLOWS.md is the full map).
   app.get("/api/privacy/status", (_req, res) => {
-    res.json({ encrypted: isEncryptionEnabled() });
+    const brain = resolveBrainMode(loadSettingsFile());
+    res.json({
+      encrypted: isEncryptionEnabled(),
+      brain,
+      textEmotion: brain !== "local" && textEmotionEnabled(),
+      desktopAwareness: cognition.config.desktopAwarenessEnabled,
+      localVoiceEngine: (process.env.SIYA_TTS_ENGINE || "edge").toLowerCase(),
+    });
   });
 
   app.post("/api/privacy/delete-all", async (_req, res) => {

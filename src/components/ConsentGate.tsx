@@ -7,21 +7,13 @@
  * changes materially so everyone is asked again.
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { HeartHandshake, Lock, Cloud, Trash2, Phone, LoaderCircle } from "lucide-react";
+import { HeartHandshake, Cloud, Trash2, Phone, LoaderCircle } from "lucide-react";
+import { DataDisclosure, usePrivacyStatus } from "./DataDisclosure";
 
-const CONSENT_VERSION = 2; // 2: disclose free-tier Gemini data use
-
-/** Whether the backend really encrypts personal data (it needs the OS keyring). */
-export function useEncryptionStatus(): boolean {
-  const [encrypted, setEncrypted] = useState(false);
-  useEffect(() => {
-    fetch("/api/privacy/status", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((status) => setEncrypted(status?.encrypted === true))
-      .catch(() => setEncrypted(false));
-  }, []);
-  return encrypted;
-}
+// 2: disclose free-tier Gemini data use
+// 3: full data-flow disclosure (camera stills, expression labels, window titles,
+//    TypeSafe, local storage), corrected "memories stay on this device"
+const CONSENT_VERSION = 3;
 
 type Status = "checking" | "needed" | "ok";
 
@@ -31,7 +23,7 @@ export function ConsentGate({ children }: { children: ReactNode }) {
   const [understands, setUnderstands] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const encrypted = useEncryptionStatus();
+  const privacy = usePrivacyStatus();
 
   useEffect(() => {
     let cancelled = false;
@@ -72,16 +64,16 @@ export function ConsentGate({ children }: { children: ReactNode }) {
   if (status === "ok") return <>{children}</>;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto bg-[#050509] px-4 py-8 text-white">
+    <div className="fixed inset-0 z-[110] flex justify-center overflow-y-auto bg-[#050509] px-4 py-8 text-white">
       <div className="pointer-events-none absolute -left-40 -top-40 h-[420px] w-[420px] rounded-full bg-indigo-700/20 blur-[130px]" />
       <div className="pointer-events-none absolute -bottom-40 -right-40 h-[480px] w-[480px] rounded-full bg-cyan-700/15 blur-[150px]" />
       {status === "checking" ? (
-        <div className="flex flex-col items-center gap-4 text-white/60">
+        <div className="my-auto flex flex-col items-center gap-4 text-white/60">
           <LoaderCircle className="h-7 w-7 animate-spin" />
           <span className="text-sm tracking-wide">Starting SIYA…</span>
         </div>
       ) : (
-        <div className="relative z-10 w-[min(94vw,540px)] rounded-3xl border border-white/10 bg-white/[0.04] p-7 shadow-[0_30px_80px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
+        <div className="relative z-10 my-auto w-[min(94vw,540px)] rounded-3xl border border-white/10 bg-white/[0.04] p-7 shadow-[0_30px_80px_rgba(0,0,0,0.6)] backdrop-blur-2xl">
           <div className="mb-5 flex flex-col items-center text-center">
             <div className="mb-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/30 to-cyan-500/20 ring-1 ring-white/10">
               <img src="/assets/brand/siya-mark.png" alt="SIYA" className="h-full w-full object-cover" />
@@ -97,17 +89,12 @@ export function ConsentGate({ children }: { children: ReactNode }) {
               <b className="text-white">Tele-MANAS 14416</b> or <b className="text-white">KIRAN 1800-599-0019</b>{" "}
               (free, 24x7), or <b className="text-white">112</b> in an emergency.
             </Item>
-            <Item icon={<Lock className="h-4 w-4 text-emerald-300" />} title="Your memories stay on this device">
-              What SIYA remembers about you, your moods, goals and health readings are stored only on this computer
-              {encrypted ? ", encrypted." : "."}
-            </Item>
-            <Item icon={<Cloud className="h-4 w-4 text-cyan-300" />} title="What is sent to Google">
-              To reply, your voice and messages are sent to Google's Gemini service. Camera and screen images are sent
-              only while you turn them on. SIYA currently uses Gemini's free tier, so Google may use these
-              conversations to improve its products. Please avoid sharing details you would not want a company to see.
+            <Item icon={<Cloud className="h-4 w-4 text-cyan-300" />} title="Where your data goes">
+              {privacy ? <DataDisclosure status={privacy} /> : "Checking this computer's setup…"}
             </Item>
             <Item icon={<Trash2 className="h-4 w-4 text-amber-300" />} title="You are in control">
-              You can delete everything SIYA knows about you at any time from the shield button in the corner.
+              You can delete what SIYA has stored about you at any time from the shield button in the corner. Data
+              already sent to Google or TypeSafe is handled under their policies and cannot be deleted from here.
             </Item>
           </div>
 
