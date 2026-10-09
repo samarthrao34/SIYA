@@ -114,7 +114,8 @@ export function DataDisclosure({ status }: { status: PrivacyStatus }) {
         </li>
         <li>
           When Share screen is off or paused, nothing from your screen is captured or sent. It also switches off if the
-          connection drops, so it never resumes on its own.{" "}
+          connection drops, so it never resumes on its own. Pictures already sent during sharing stay part of that
+          conversation with {destination}.{" "}
           {status.screenShareActive ? "Share screen is on right now." : "Share screen is off right now."}
         </li>
       </Section>

@@ -3229,6 +3229,11 @@ async function startServer() {
             if (!active) {
               screenVision?.dispose();
               lastSharedScreenFrameAt = 0;
+              // The local brain re-attaches its latest frame to later turns;
+              // drop it so nothing captured while sharing is sent afterwards.
+              // Gemini has no equivalent: frames it already received stay in
+              // that conversation's context.
+              (session as { clearVisualContext?: () => void }).clearVisualContext?.();
             }
             logCommand(`SCREEN_SHARE ${active ? "on" : "off"}`);
           } else if (

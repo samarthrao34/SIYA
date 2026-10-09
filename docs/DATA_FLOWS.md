@@ -32,6 +32,10 @@ screen and stopping or pausing it.
 - Proactive check-ins never take screenshots; they can only use frames from a
   share already in progress. "Look at my screen" without sharing captures
   nothing, and SIYA is told to ask the user to click Share screen.
+- Stopping sharing clears the screen-vision cache and the local brain's held
+  frame (`clearVisualContext`), so nothing captured while sharing is attached
+  to a later turn. Frames Gemini already received stay in that conversation's
+  context; they cannot be recalled.
 - Closing the session ends sharing and clears the cached frame. If the
   connection drops, the client stops sharing too, so a reconnect never
   resumes it; the user has to click Share screen again.

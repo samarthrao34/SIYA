@@ -295,6 +295,15 @@ export class LocalLiveSession {
     }
   }
 
+  /**
+   * Forget the latest camera or screen frame (Share screen was switched off),
+   * so a frame from while sharing was on is never attached to a later turn.
+   */
+  clearVisualContext(): void {
+    this.latestFrame = null;
+    this.toolsWantFrame = false;
+  }
+
   sendClientContent(content: { turns?: Array<{ role?: string; parts?: Array<Record<string, any>> }> }): void {
     if (this.closed) return;
     const parts = (content.turns || []).flatMap((turn) => turn.parts || []);
