@@ -175,8 +175,8 @@ assembles the APK with `aapt2`/`d8`/`apksigner` directly, without Gradle.
 
 ```bash
 npm run typecheck   # server, desktop UI and mobile app
-npm test            # node:test suites in tests/
 npm run build       # production UI + server bundle
+npm test            # node:test suites in tests/ (the desktop shell test needs the build)
 ```
 
 CI runs the same three steps on every push and pull request, plus a Python
