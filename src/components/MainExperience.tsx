@@ -562,6 +562,15 @@ export function MainExperience() {
   L.useEffect(() => {
     rn.current && rn.current.setScreenShareActive(s && !r);
   }, [s, r]);
+  // A dropped or closed connection ends screen sharing: after a reconnect the
+  // user has to click Share screen again, so sharing never resumes on its own.
+  const connectionStateRef = L.useRef(a);
+  L.useEffect(() => {
+    const previous = connectionStateRef.current;
+    connectionStateRef.current = a;
+    const wasConnected = previous !== "disconnected" && previous !== "connecting";
+    if (s && wasConnected && (a === "disconnected" || a === "connecting")) W();
+  }, [a]);
   const [settingsError, setSettingsError] = L.useState(null);
   const [settingsPending, setSettingsPending] = L.useState(0);
   const Za = async (patch) => {

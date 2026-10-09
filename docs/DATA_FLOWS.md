@@ -32,7 +32,9 @@ screen and stopping or pausing it.
 - Proactive check-ins never take screenshots; they can only use frames from a
   share already in progress. "Look at my screen" without sharing captures
   nothing, and SIYA is told to ask the user to click Share screen.
-- Closing the session ends sharing and clears the cached frame.
+- Closing the session ends sharing and clears the cached frame. If the
+  connection drops, the client stops sharing too, so a reconnect never
+  resumes it; the user has to click Share screen again.
 
 **Activity awareness**. A saved setting (`activityAwareness` in
 `settings.json`), off unless the user turns it on in the Privacy Center.
