@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import { GoogleGenAI, Type } from "@google/genai";
 import { Memory, MemoryTransaction } from "../shared/memoryTypes";
-import { dataFile } from "./paths";
+import { dataFile, restrictToOwner } from "./paths";
 import { decryptText, encryptText } from "./secureStore";
 
 const MEMORY_FILE = dataFile("memories.json");
@@ -25,7 +25,8 @@ export async function loadMemories(): Promise<Memory[]> {
 
 export async function saveMemories(memories: Memory[]): Promise<void> {
   try {
-    await fs.writeFile(MEMORY_FILE, encryptText(JSON.stringify(memories, null, 2)), "utf-8");
+    await fs.writeFile(MEMORY_FILE, encryptText(JSON.stringify(memories, null, 2)), { encoding: "utf-8", mode: 0o600 });
+    restrictToOwner(MEMORY_FILE);
     console.log(`[Memory] Saved ${memories.length} memories successfully.`);
   } catch (error) {
     console.error("[Memory] Error writing memory file:", error);
@@ -80,6 +81,50 @@ export function formatSystemInstructionsWithMemories(baseInstruction: string, me
 let isConsolidating = false;
 let consolidationBackoffUntil = 0;
 
+/** Most memories sent to Gemini with one consolidation request. */
+export const CONSOLIDATION_MEMORY_LIMIT = 30;
+
+function wordsOf(text: string): Set<string> {
+  return new Set((text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || []));
+}
+
+/**
+ * Picks the memories most related to a dialogue slice, so consolidation sends
+ * Gemini only what it needs to update instead of everything SIYA remembers.
+ * Ranked by shared words with the dialogue, then by most recently updated.
+ * Edits are still applied to the full list, so unsent memories are untouched.
+ * Corrections send everything (see CORRECTION_CUE).
+ */
+/**
+ * The user correcting or retracting something ("I moved", "not anymore",
+ * "forget that", "ab nahi", "galat"). The stale memory may share no words with
+ * the correction, so such turns get the full list and it can be updated.
+ */
+const CORRECTION_CUE =
+  /\b(actually|no longer|not any ?more|anymore|moved|changed|switched|quit|stopped|left|instead|wrong|correction|forget|remove that|used to|ex-|now i)\b|\b(ab nahi|ab se|galat|bhool ja|bhool jao|badal|chhod)|अब नहीं|गलत|भूल जा/i;
+
+export function isCorrectionDialogue(dialogue: { role: string; text: string }[]): boolean {
+  return dialogue.some((line) => line.role === "user" && CORRECTION_CUE.test(line.text));
+}
+
+export function selectMemoriesForConsolidation(
+  memories: Memory[],
+  dialogue: { role: string; text: string }[],
+  limit = CONSOLIDATION_MEMORY_LIMIT,
+): Memory[] {
+  if (memories.length <= limit || isCorrectionDialogue(dialogue)) return memories;
+  const dialogueWords = wordsOf(dialogue.map((line) => line.text).join(" "));
+  return memories
+    .map((memory) => {
+      let overlap = 0;
+      for (const word of wordsOf(memory.text)) if (dialogueWords.has(word)) overlap += 1;
+      return { memory, overlap, updated: Date.parse(memory.updatedAt || memory.createdAt || "") || 0 };
+    })
+    .sort((a, b) => b.overlap - a.overlap || b.updated - a.updated)
+    .slice(0, limit)
+    .map((entry) => entry.memory);
+}
+
 export async function processConversationSlice(
   apiKey: string,
   dialogueHistory: { role: string; text: string }[]
@@ -111,9 +156,10 @@ export async function processConversationSlice(
     });
 
     const currentMemories = await loadMemories();
-    
+    const sentMemories = selectMemoriesForConsolidation(currentMemories, dialogueHistory);
+
     // Format memory map to help Gemini understand what to edit
-    const memoryContext = currentMemories.map(m => `ID: ${m.id} | Category: ${m.category} | Fact: ${m.text}`).join("\n");
+    const memoryContext = sentMemories.map(m => `ID: ${m.id} | Category: ${m.category} | Fact: ${m.text}`).join("\n");
     const dialogueContext = dialogueHistory.map(line => `${line.role === "user" ? "User" : "Siya"}: ${line.text}`).join("\n");
 
     const prompt = `You are Siya's deep cognitive recollection engine. Your task is to analyze the recent conversation piece against previous persistent memories, and output precise update transactions.

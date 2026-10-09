@@ -32,8 +32,10 @@ In the default mode, your voice, messages and (while you turn them on) camera
 and screen images are sent to Google Gemini; see
 [docs/DATA_FLOWS.md](docs/DATA_FLOWS.md) for exactly what leaves the device.
 Face and hand analysis runs on-device, and stored memories are encrypted with
-a key held in the OS keyring. A local mode (Gemma + local speech) keeps the
-conversation on the machine.
+a key held in the OS keyring. SIYA sees your screen only while you switch on
+Share screen, and which app you are using only if you turn on Activity
+awareness. A local mode (Gemma + local speech) keeps the conversation on the
+machine, apart from the external services it lists on the consent screen.
 
 ## Features
 
@@ -44,8 +46,8 @@ conversation on the machine.
 | **Emotion & behaviour sensing** | MediaPipe face and hand landmarks, run locally in WASM, read facial emotion plus longer-term cues such as yawning, fatigue, head-in-hands and fidgeting. The resulting labels are shared with the model. Optional text-emotion reading of the user's words via TypeSafe. |
 | **Memory** | Long-term memories consolidated from conversations, browsable and editable in the Memories panel. |
 | **Cognition** | An autonomous layer for attention, goals, planning, curiosity, social initiative, proactive check-ins, and a critic that reviews tool use. |
-| **Desktop control** | 60+ tools through a local Python agent: apps and windows, files, mouse and keyboard, clipboard, screenshots and OCR, volume and brightness, web search, and power actions with two-step confirmation. |
-| **Screen vision** | "Look at my screen" captures the display and feeds it to the model so it can answer about what you're seeing. |
+| **Desktop control** | 60+ tools through a local Python agent: apps and windows, files, mouse and keyboard, clipboard, screenshots and OCR (only while Share screen is on), volume and brightness, web search, and power actions with two-step confirmation. |
+| **Screen vision** | While you have Share screen on, SIYA sees your screen and can answer about it or read text off it. With it off, nothing from the screen is captured. |
 | **API hub** | Imports the public-APIs catalogue, health-checks providers, and runs verified adapters as tools. |
 | **Offline brain** | Optional local mode: Gemma 4 via LiteRT-LM, Silero VAD and Kokoro / Edge TTS. Same tools, memory and avatar. |
 | **Mobile** | A standalone Android app with the same avatar and persona that talks to Gemini directly from the phone. |
@@ -65,7 +67,7 @@ flowchart LR
   Server <-. "local brain mode" .-> LLM[(Gemma via LiteRT-LM)]
   Agent --> OS["OS: windows, files,<br/>input, screen"]
   Phone["Android app<br/>mobile/"] <-- "Gemini Live" --> Gemini
-  Phone <-. "memory API (adb reverse)" .-> Server
+  Phone <-. "memory (tailnet, device identity)" .-> MemGW["Memory gateway<br/>services/memory_gateway"]
 ```
 
 The Electron main process starts the bundled backend (`dist/server.cjs`) and
@@ -184,7 +186,8 @@ SIYA/
 ├── electron/               Desktop shell: main process, preload, splash, tray, updates
 ├── services/               Python sidecars
 │   ├── desktop_agent/      FastAPI desktop-control agent (Linux / Hyprland)
-│   └── local_voice/        Silero VAD + Kokoro / Edge TTS for the offline brain
+│   ├── local_voice/        Silero VAD + Kokoro / Edge TTS for the offline brain
+│   └── memory_gateway/     Tailscale-identity gateway for the mobile memory server (runs on that host)
 ├── mobile/
 │   ├── app/                Standalone mobile web app (React), packed into the APK
 │   ├── android/            Minimal Android WebView shell + local asset server
@@ -249,13 +252,17 @@ OpenAI-compatible Gemma endpoint at `SIYA_LOCAL_LLM_URL`.
 ### Mobile (Android)
 
 ```bash
-cp mobile/app/.env.example mobile/app/.env   # set VITE_SIYA_BRAIN_TOKEN
+cp mobile/app/.env.example mobile/app/.env   # set VITE_SIYA_MEMORY_URL (no secrets: they would ship in the APK)
 ./mobile/build-mobile.sh                     # → mobile/build/siya-mobile.apk
 ./mobile/connect-phone.sh                    # optional: link phone to desktop memory over USB
 ```
 
 The build script needs the Android SDK build tools (36.x) and JDK 17. It
 assembles the APK with `aapt2`/`d8`/`apksigner` directly, without Gradle.
+The mobile build refuses to run if any `VITE_*` variable looks like a
+credential. The phone reaches its memory server through
+[`services/memory_gateway`](services/memory_gateway/README.md), which
+identifies the phone by its Tailscale device instead of a shared token.
 
 ## Development
 
@@ -283,26 +290,42 @@ Conventions:
 The full map of what leaves the device, who receives it and what is stored is
 in [docs/DATA_FLOWS.md](docs/DATA_FLOWS.md). In short:
 
+- **Your screen: only while you share it.** SIYA can see the screen only while
+  Share screen is on (off at every launch). Every screenshot path, including
+  the model's own screen tools and proactive check-ins, goes through one gate
+  that refuses capture otherwise and discards a capture still running when you
+  stop sharing. The sharing card shows where frames go.
+- **Which app you use: only with Activity awareness.** Off by default. Without
+  it, app names and window titles are not observed and are removed from
+  everything sent to the model.
 - **Sent to Google Gemini (default mode).** Your voice and typed messages; a
   camera still every 2.5 s while the camera is on, plus the expression and
-  behaviour labels read from it; screen images while screen sharing is on;
-  the active app name and window title for proactive check-ins (desktop
-  awareness, on by default); recent conversation for memory updates. On
-  Gemini's free tier, Google may use this data to improve its products.
+  behaviour labels read from it; shared-screen frames; recent conversation
+  with up to 30 related memories for memory updates (all of them when you
+  correct something); goals you plan.
+  Depending on your Gemini plan, Google may use this data to improve its
+  products.
 - **Sent to TypeSafe (optional).** What you say or type, to read its emotional
   tone, only when `TYPESAFE_API_KEY` is set and never in local mode.
-- **Local mode.** Conversation, camera and screen stay on the machine. With
-  the default Edge voice, SIYA's own replies go to Microsoft for speech
-  synthesis; `SIYA_TTS_ENGINE=kokoro` keeps speech offline.
+- **Local mode.** Conversation, camera and shared screen go to the local model.
+  It is not fully local while any of these apply, and the consent screen says
+  which: the default Edge voice sends SIYA's replies to Microsoft (kept for
+  Hindi quality; `SIYA_TTS_ENGINE=kokoro` is offline), planning a goal uses
+  Gemini when a key is saved, and a model or voice server configured on
+  another machine receives what it processes.
 - **Processed on-device only.** Face and hand landmarks, crisis-language
-  detection, OCR. Camera images and voice audio are never written to disk.
+  detection. Camera images and voice audio are never written to disk.
 - **Stored on the device.** Memories, goals and last-session notes, encrypted
   with AES-256-GCM (key sealed in the OS keyring via Electron `safeStorage`).
-  Settings, logs, learned skills and the Gemini key file are not encrypted.
+  Settings, learned skills, logs and the Gemini key file are not encrypted.
+  Files SIYA writes are readable only by your user account; the detailed
+  cognition log is written only in debug mode.
 - **Consent and control.** A first-run consent and age gate that lists the
-  flows active in the current setup, a Privacy Center with "delete all my
-  data", and two-step confirmation for destructive desktop actions. Deleting
-  cannot recall data already sent to Google or TypeSafe.
+  flows active in the current setup, a Privacy Center with the Activity
+  awareness switch and "delete all my data" (memories, goals, session notes,
+  learned skills, logs), and two-step confirmation for destructive desktop
+  actions. Deleting cannot recall data already sent to Google, TypeSafe or
+  Microsoft.
 - **Crisis safety net.** Deterministic detection on every message, independent
   of the model, shows helpline numbers on screen.
 

@@ -11,6 +11,7 @@ export type ToolHandler = (
   tool: string,
   args: Record<string, unknown>,
   signal: AbortSignal,
+  context?: ToolExecutionContext,
 ) => Promise<{ ok: boolean; result?: unknown; error?: string }>;
 
 export interface ToolExecutorOptions {
@@ -85,7 +86,7 @@ export class ToolExecutor {
         attempts += 1;
         try {
           const response = await withTimeout(
-            this.options.handler(tool, args, controller.signal),
+            this.options.handler(tool, args, controller.signal, context),
             descriptor.timeoutMs,
             controller,
           );

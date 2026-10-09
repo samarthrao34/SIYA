@@ -20,8 +20,16 @@ import { WakeWordListener } from "../settings/wakeWordListener";
 import { Mic as $g, X as Is, Send as MS, Square as NS, RefreshCw as TS, Brain as Vo, Settings as ey, Pause as gS, Compass as gp, Volume2 as iy, Monitor as mS, CircleAlert as tS, Power as ty, Play as vS, Camera as cS } from "lucide-react";
 import { ensureEmotionDetector, classifyBlendshapes, EmotionSmoother } from "../vision/emotionDetector";
 import { BehaviorAnalyzer, ensureHandDetector } from "../vision/behaviorAnalyzer";
+import { usePrivacyStatus } from "./DataDisclosure";
 
 export function MainExperience() {
+  // Where shared-screen frames go, shown on the "sharing" card.
+  const privacy = usePrivacyStatus();
+  const screenDestination = !privacy || privacy.brain === "gemini"
+    ? "Google Gemini"
+    : privacy.localModelOnDevice
+      ? "the local model on this computer"
+      : "a model server on another machine";
   const [a, i] = L.useState("disconnected"),
     [s, o] = L.useState(!1),
     [r, h] = L.useState(!1),
@@ -141,6 +149,7 @@ export function MainExperience() {
           rn.current &&
             tt.current !== "disconnected" &&
             rn.current.sendVideoFrame(Ci, {
+              source: "screen",
               changeScore: D.current,
               heartbeat: _.current,
             });
@@ -172,6 +181,7 @@ export function MainExperience() {
           (gt.playsInline = !0),
           gt.play().catch((Rt) => console.error("Video play warning:", Rt)),
           (v.current = gt),
+          rn.current && rn.current.setScreenShareActive(!0),
           o(!0),
           h(!1),
           (q.onended = () => {
@@ -200,6 +210,8 @@ export function MainExperience() {
       }
     },
     W = () => {
+      // Revoke screen access on the server before tearing the stream down.
+      rn.current && rn.current.setScreenShareActive(!1);
       (Y.current && (clearInterval(Y.current), (Y.current = null)),
         y.current &&
           (y.current.getTracks().forEach((it) => {
@@ -243,7 +255,7 @@ export function MainExperience() {
         const jpeg = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
         const emotion = latestEmotionRef.current,
           behavior = latestBehaviorRef.current;
-        rn.current && rn.current.sendVideoFrame(jpeg, { changeScore: 20, ...(emotion ? { emotion } : {}), ...(behavior ? { behavior } : {}) });
+        rn.current && rn.current.sendVideoFrame(jpeg, { source: "camera", changeScore: 20, ...(emotion ? { emotion } : {}), ...(behavior ? { behavior } : {}) });
       } catch (err) {
         console.error("[Camera] Failed drawing frame to canvas:", err);
       }
@@ -361,10 +373,12 @@ export function MainExperience() {
       setCamOn(!1);
     },
     $ = () => {
+      rn.current && rn.current.setScreenShareActive(!1);
       h(!0);
     },
     ot = () => {
-      (h(!1),
+      (rn.current && rn.current.setScreenShareActive(!0),
+        h(!1),
         setTimeout(() => {
           k();
         }, 100));
@@ -543,6 +557,20 @@ export function MainExperience() {
       startCamera();
     }
   }, [$t.camDeviceId]);
+  // Keep the server's screen-access gate in step with Share screen (on, paused,
+  // stopped). The handlers above also send it synchronously before frames.
+  L.useEffect(() => {
+    rn.current && rn.current.setScreenShareActive(s && !r);
+  }, [s, r]);
+  // A dropped or closed connection ends screen sharing: after a reconnect the
+  // user has to click Share screen again, so sharing never resumes on its own.
+  const connectionStateRef = L.useRef(a);
+  L.useEffect(() => {
+    const previous = connectionStateRef.current;
+    connectionStateRef.current = a;
+    const wasConnected = previous !== "disconnected" && previous !== "connecting";
+    if (s && wasConnected && (a === "disconnected" || a === "connecting")) W();
+  }, [a]);
   const [settingsError, setSettingsError] = L.useState(null);
   const [settingsPending, setSettingsPending] = L.useState(0);
   const Za = async (patch) => {
@@ -1174,8 +1202,8 @@ export function MainExperience() {
                         className:
                           "text-[7px] font-bold font-mono tracking-widest text-slate-200",
                         children: r
-                          ? "Screen sharing paused"
-                          : "Screen sharing on",
+                          ? "Screen sharing paused · nothing sent"
+                          : `Visible to SIYA · sent to ${screenDestination}`,
                       }),
                     ],
                   }),

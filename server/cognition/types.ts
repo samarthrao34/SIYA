@@ -203,6 +203,8 @@ export interface ToolDescriptor {
 
 export interface ToolExecutionContext {
   projectRoot?: string;
+  /** Live session the call is made for; screen tools are authorised per session. */
+  connectionId?: string;
   confirmed?: boolean;
   correlationId?: string;
 }

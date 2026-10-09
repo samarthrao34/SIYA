@@ -13,7 +13,9 @@ import { DataDisclosure, usePrivacyStatus } from "./DataDisclosure";
 // 2: disclose free-tier Gemini data use
 // 3: full data-flow disclosure (camera stills, expression labels, window titles,
 //    TypeSafe, local storage), corrected "memories stay on this device"
-const CONSENT_VERSION = 3;
+// 4: screen only while Share screen is on, Activity awareness opt-in, local
+//    mode's external services, memory minimisation, skills deleted on request
+const CONSENT_VERSION = 4;
 
 type Status = "checking" | "needed" | "ok";
 
@@ -64,7 +66,7 @@ export function ConsentGate({ children }: { children: ReactNode }) {
   if (status === "ok") return <>{children}</>;
 
   return (
-    <div className="fixed inset-0 z-[110] flex justify-center overflow-y-auto bg-[#050509] px-4 py-8 text-white">
+    <div className="fixed inset-0 z-[110] flex justify-center overflow-y-auto overflow-x-hidden bg-[#050509] px-4 py-8 text-white">
       <div className="pointer-events-none absolute -left-40 -top-40 h-[420px] w-[420px] rounded-full bg-indigo-700/20 blur-[130px]" />
       <div className="pointer-events-none absolute -bottom-40 -right-40 h-[480px] w-[480px] rounded-full bg-cyan-700/15 blur-[150px]" />
       {status === "checking" ? (
@@ -93,8 +95,9 @@ export function ConsentGate({ children }: { children: ReactNode }) {
               {privacy ? <DataDisclosure status={privacy} /> : "Checking this computer's setup…"}
             </Item>
             <Item icon={<Trash2 className="h-4 w-4 text-amber-300" />} title="You are in control">
-              You can delete what SIYA has stored about you at any time from the shield button in the corner. Data
-              already sent to Google or TypeSafe is handled under their policies and cannot be deleted from here.
+              You can delete what SIYA has stored about you at any time from the shield button in the corner. You can
+              switch Share screen and Activity awareness off at any time. Data already sent to Google, TypeSafe or Microsoft
+              is handled under their policies and cannot be deleted from here.
             </Item>
           </div>
 

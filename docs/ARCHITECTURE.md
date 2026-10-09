@@ -8,6 +8,7 @@ SIYA is four processes that talk over localhost:
 | Node backend | `server/` → `dist/server.cjs` | 3000 | Serves the UI, `/api/*`, the `/live` WebSocket relay to Gemini Live, memory, cognition, safety |
 | Desktop agent | `services/desktop_agent/` | 8765 | FastAPI tool server for OS control (`POST /execute {tool, args}`) |
 | Local voice *(optional)* | `services/local_voice/` | 8795 | Silero VAD + Kokoro/Edge TTS for the offline brain |
+| Memory gateway *(mobile, on the memory-server host)* | `services/memory_gateway/` | tailnet | Device-identity front door for the phone's memory server |
 
 ## Startup
 
@@ -45,9 +46,14 @@ mic (pcm-capture-worklet) ─► src/api/liveSession.ts ─► ws /live ─► s
   tools go to the Python agent, API tools to `server/api-hub`, memory tools to
   `server/memory.ts`. Dangerous power actions need a confirmation token from
   `services/desktop_agent/tools_confirmation.py`.
+- **Privacy gates** (`server/privacyControls.ts`): every desktop-agent call,
+  including Electron screen capture, passes `createGatedAgentCaller`. Screen
+  tools work only for the live session that has Share screen on; activity tools and
+  any app or window names in results need the Activity awareness setting.
+  See [DATA_FLOWS.md](DATA_FLOWS.md#the-two-privacy-switches).
 - **Screen vision** (`server/screenVision.ts`) spots "look at my screen"
-  intents, captures through the agent or Electron IPC, and injects the frame
-  into the live session.
+  intents and, while Share screen is on, captures through the agent or
+  Electron IPC and injects the frame into the live session.
 
 ## Brains
 
@@ -96,6 +102,13 @@ engine; `vrmModelSource.ts` loads the VRM and maps its skeleton onto the rig.
 the phone. `mobile/build-mobile.sh` copies the bundle into
 `mobile/android/assets/www/`, where `AssetServer.java` serves it to the WebView
 on `127.0.0.1`. The script then compiles and signs the APK without Gradle.
+
+The phone's memory goes to the owner's self-hosted memory server through
+`services/memory_gateway`, which runs on that server's host. The gateway
+identifies the phone by its Tailscale device (`tailscale whois`), allows only
+listed devices and the four routes the app uses, and adds the server's token
+itself, so the APK carries no credential. The mobile Vite config refuses to
+build if a `VITE_*` variable looks like a credential.
 
 ## Future: physical embodiment
 

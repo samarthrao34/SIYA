@@ -153,6 +153,12 @@ export class SituationModel {
     return this.getSnapshot();
   }
 
+  /** Forget the active app and window (activity awareness was turned off). */
+  clearActivity(): void {
+    this.snapshot.activeApp = null;
+    this.snapshot.activeWindow = null;
+  }
+
   getSnapshot(at = Date.now()): SituationSnapshot {
     const silenceStarted = this.snapshot.silenceStartedAt
       ? new Date(this.snapshot.silenceStartedAt).getTime()

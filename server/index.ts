@@ -1,7 +1,9 @@
+import { withOriginalUmask } from "./privateUmask"; // must stay first: owner-only data files
 import { readLiveAudio } from "./liveAudio";
 import { connectLiveBrain, resolveBrainMode, LOCAL_PERSONA, formatLocalMemories } from "./localLive";
 import { HELPLINES, buildSafetyTurn, detectCrisisLanguage } from "./safety";
 import { isEncryptionEnabled } from "./secureStore";
+import { PrivacyControls, buildPrivacyStatus, createGatedAgentCaller, SCREEN_OFF_MESSAGE } from "./privacyControls";
 import { distressLabel, readTextEmotion, textEmotionEnabled, type TextEmotionReading } from "./textEmotion";
 import express from "express";
 import http from "http";
@@ -24,6 +26,7 @@ import { Memory } from "../shared/memoryTypes";
 import {
   DATA_DIR,
   dataFile,
+  restrictToOwner,
   getGeminiApiKey,
   hasGeminiApiKey,
   setGeminiApiKey,
@@ -88,12 +91,45 @@ async function migrateDevelopmentCognitionData(): Promise<void> {
 // Never throws; logging failures are swallowed so they can't break the app.
 // ---------------------------------------------------------------------------
 const LOGS_DIR = path.join(DATA_DIR, "logs");
-try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch { /* already exists */ }
+try { fs.mkdirSync(LOGS_DIR, { recursive: true, mode: 0o700 }); } catch { /* already exists */ }
+restrictToOwner(LOGS_DIR, 0o700);
+
+/**
+ * The cognition log is a timeline of SIYA's internal events (event types,
+ * attention scores, decisions), useful only for debugging. It is written only
+ * with SIYA_COGNITION_DEBUG=true and capped at COGNITION_LOG_MAX_BYTES, keeping
+ * one previous file. Without debug mode an existing log is left untouched.
+ */
+const COGNITION_LOG_MAX_BYTES = 5 * 1024 * 1024;
+let cognitionLogWrites = 0;
+
+function appendCognitionLog(entry: string): void {
+  if (!/^(1|true|yes|on)$/i.test(process.env.SIYA_COGNITION_DEBUG || "")) return;
+  if (cognitionLogWrites++ % 100 === 0) {
+    try {
+      const target = path.join(LOGS_DIR, "cognition.log");
+      if (fs.statSync(target).size >= COGNITION_LOG_MAX_BYTES) fs.renameSync(target, `${target}.1`);
+    } catch {
+      /* no log yet */
+    }
+  }
+  appendLog("cognition.log", entry);
+}
+
+/** Log files already made owner-only in this process. */
+const restrictedLogs = new Set<string>();
 
 function appendLog(fileName: string, message: string): void {
   try {
+    const target = path.join(LOGS_DIR, fileName);
     const line = `[${new Date().toISOString()}] ${message}\n`;
-    fs.appendFile(path.join(LOGS_DIR, fileName), line, () => {});
+    fs.appendFile(target, line, { mode: 0o600 }, () => {
+      // Log files from earlier versions may still be world-readable.
+      if (!restrictedLogs.has(target)) {
+        restrictedLogs.add(target);
+        restrictToOwner(target);
+      }
+    });
   } catch {
     /* logging is best-effort */
   }
@@ -283,11 +319,13 @@ function spawnDesktopAgent(): void {
     return;
   }
   try {
-    const child = spawn(
+    // The agent creates files for the user (documents, saved screenshots), so
+    // it keeps the user's normal umask rather than SIYA's private one.
+    const child = withOriginalUmask(() => spawn(
       py,
       ["-m", "uvicorn", "desktop_agent.main:app", "--app-dir", "services", "--host", "127.0.0.1", "--port", "8765"],
       { cwd: process.cwd(), detached: true, stdio: "ignore", env: agentEnv }
-    );
+    ));
     child.unref();
     logStartup(`AGENT_SPAWN python pid=${child.pid}`);
     console.log(`[Desktop Agent] Auto-spawned via Python (PID ${child.pid}).`);
@@ -390,7 +428,15 @@ async function ensureDesktopObserver(): Promise<string | null> {
   return null;
 }
 
+// Privacy gates (server/privacyControls.ts). Screen access follows the live
+// session's Share screen state; activity awareness follows the saved setting,
+// bound once startServer() can read settings.json. Both start off.
+let activityAwarenessSetting: () => boolean = () => false;
+const privacyControls = new PrivacyControls(() => activityAwarenessSetting());
+
 async function fetchDesktopObservation(signal: AbortSignal): Promise<DesktopSnapshot> {
+  // No app names, window titles or desktop state without activity awareness.
+  if (!privacyControls.isActivityAwarenessActive()) return emptyDesktopObservation();
   const url = desktopObserverUrl || await ensureDesktopObserver();
   if (!url) return emptyDesktopObservation();
   const response = await fetch(`${url}/observe`, { signal });
@@ -409,7 +455,7 @@ function emptyDesktopObservation(): DesktopSnapshot {
   };
 }
 
-async function callDesktopAgent(
+async function rawCallDesktopAgent(
   tool: string,
   args: Record<string, unknown>,
   outerSignal?: AbortSignal,
@@ -466,6 +512,12 @@ async function callDesktopAgent(
   }
 }
 
+/**
+ * The only way the rest of the server reaches the desktop agent or Electron's
+ * screen capture: every call passes the privacy gates first.
+ */
+const callDesktopAgent = createGatedAgentCaller(rawCallDesktopAgent, privacyControls);
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -481,9 +533,11 @@ async function startServer() {
   const cognition = new CognitiveRuntime({
     dataDir: COGNITION_DATA_DIR,
     projectRoot: process.env.SIYA_APP_ROOT || process.cwd(),
-    logger: (entry) => appendLog("cognition.log", JSON.stringify(entry)),
+    logger: (entry) => appendCognitionLog(JSON.stringify(entry)),
   });
   await cognition.initialize(legacyMemoriesAtBoot);
+  restrictToOwner(COGNITION_DATA_DIR, 0o700);
+  restrictToOwner(path.join(COGNITION_DATA_DIR, "cognition"), 0o700);
   // Encrypt personal data written before encryption at rest existed (a
   // re-save through the encrypting write paths; harmless if already done).
   if (isEncryptionEnabled()) {
@@ -631,9 +685,13 @@ async function startServer() {
   const toolExecutor = new ToolExecutor({
     config: cognition.config,
     registry: toolRegistry,
-    handler: (tool, args, signal) => API_HUB_TOOLS.has(tool)
+    handler: (tool, args, signal, context) => API_HUB_TOOLS.has(tool)
       ? callApiHubTool(tool, args, signal)
-      : callDesktopAgent(tool, args, signal),
+      : callDesktopAgent(tool, args, signal, {
+        // Live-session calls use "<connectionId>:<callId>" correlation IDs, so
+        // a confirmed call still knows which session (and share) it is for.
+        connectionId: context?.connectionId || context?.correlationId?.split(":")[0],
+      }),
     emit: (event) => cognition.process(event).then(() => undefined),
   });
   const modelRouter = new ModelRouter({
@@ -1068,6 +1126,22 @@ async function startServer() {
     fs.renameSync(SETTINGS_FILE + ".tmp", SETTINGS_FILE);
   }
 
+  // Activity awareness is opt-in: only an explicit saved `true` turns it on,
+  // and SIYA_ENABLE_DESKTOP_AWARENESS=false keeps it off regardless.
+  activityAwarenessSetting = () =>
+    cognition.config.desktopAwarenessEnabled && loadSettingsFile().activityAwareness === true;
+
+  /** Starts or stops desktop observation to match activity awareness. */
+  const applyActivityAwareness = async () => {
+    if (!privacyControls.isActivityAwarenessActive()) {
+      desktopPerception.stop();
+      cognition.situation.clearActivity();
+      return;
+    }
+    const observerUrl = await ensureDesktopObserver();
+    if (observerUrl && privacyControls.isActivityAwarenessActive()) desktopPerception.start();
+  };
+
   app.get("/api/settings", async (_req, res) => {
     try {
       res.json(loadSettingsFile());
@@ -1082,12 +1156,16 @@ async function startServer() {
       if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
         return res.status(400).json({ error: "Request body must be a JSON object." });
       }
+      if ("activityAwareness" in patch && typeof patch.activityAwareness !== "boolean") {
+        return res.status(400).json({ error: "activityAwareness must be true or false." });
+      }
       if ("autoStart" in patch) {
         const result = await callDesktopAgent(patch.autoStart ? "enableAutoStart" : "disableAutoStart", {});
         if (!result.ok) return res.status(502).json({ error: result.error || "Could not change launch-at-startup." });
       }
       const next = { ...loadSettingsFile(), ...patch };
       saveSettingsFile(next);
+      if ("activityAwareness" in patch) await applyActivityAwareness();
 
       logCommand(`SETTINGS_UPDATED ${JSON.stringify(patch)}`);
       res.json(next);
@@ -1108,19 +1186,23 @@ async function startServer() {
   // flows that are actually active (docs/DATA_FLOWS.md is the full map).
   app.get("/api/privacy/status", (_req, res) => {
     const brain = resolveBrainMode(loadSettingsFile());
-    res.json({
+    res.json(buildPrivacyStatus({
       encrypted: isEncryptionEnabled(),
       brain,
-      textEmotion: brain !== "local" && textEmotionEnabled(),
-      desktopAwareness: cognition.config.desktopAwarenessEnabled,
-      localVoiceEngine: (process.env.SIYA_TTS_ENGINE || "edge").toLowerCase(),
-    });
+      textEmotionConfigured: textEmotionEnabled(),
+      activityAwarenessAllowed: cognition.config.desktopAwarenessEnabled,
+      activityAwarenessActive: privacyControls.isActivityAwarenessActive(),
+      screenShareActive: privacyControls.isScreenAccessActive(),
+      env: process.env,
+      geminiKeySaved: hasGeminiApiKey(),
+    }));
   });
 
   app.post("/api/privacy/delete-all", async (_req, res) => {
     try {
       await cognition.memories.forgetAll();
       await cognition.goals.forgetAll();
+      await cognition.skills.forgetAll();
       await saveMemories([]);
       // Readings stored by the retired smartwatch feature, if any remain.
       fs.rmSync(dataFile("health_history.jsonl"), { force: true });
@@ -1794,6 +1876,7 @@ async function startServer() {
         "   - PC CONTROL: Use 'volumeUp', 'volumeDown', 'setVolume', 'muteToggle' for audio. For DANGEROUS actions (shutdown/restart/sleep/lock) you MUST use the two-step flow: first call 'requestPowerAction' to get a confirmation token, then ASK THE USER OUT LOUD to confirm (e.g. 'Are you sure you want me to shut down your PC?'). Only if they say yes, call 'executePowerAction' with the token. Never run a power action without explicit verbal confirmation.\n" +
         "   - WINDOW MANAGEMENT: Use 'minimizeWindow', 'maximizeWindow', 'closeWindow', 'switchApplication' to control the active or named window.\n" +
         "   - CLIPBOARD: Use 'copySelected' (sends Ctrl+C, reads clipboard), 'pasteClipboard' (writes + Ctrl+V), 'getClipboard', 'clearClipboard'.\n" +
+        "   - SCREEN PRIVACY: You can see the user's screen only while they have Share screen switched on. Screen tools fail with 'Screen access is off' otherwise; when that happens, or the user asks you to look at their screen without sharing, say you can't see it and ask them to click Share screen. Never claim to see the screen without an attached image.\n" +
         "   - SCREENSHOT & SCREEN READING: Use 'takeScreenshot', 'saveScreenshot', 'analyzeScreenshot' (OCR of the screen), 'readScreen' (OCR of the active window + its title). Use these to answer 'What error is showing on my screen?' or 'Read the visible text'.\n" +
         "   - BROWSER INTERACTION: After a site opens in the default browser, use viewScreen/readScreen and the generic mouse/keyboard tools to interact with what TECH can actually see.\n" +
         "   - CODING ASSISTANCE: Use 'createPythonFile', 'writeCodeFile' (any language), 'createProjectFolder' (with subfolders), 'runPythonScript' (captures output). Example: 'Create and run a hello world Python script' -> createPythonFile then runPythonScript, then read back the output naturally.\n" +
@@ -2648,9 +2731,13 @@ async function startServer() {
                 voiceSafetyTriggered = true;
                 raiseCrisisSafety(voiceScreenIntentText, true);
               }
+              // Spoken "look at my screen" only captures while Share screen is
+              // on; otherwise the system instruction has SIYA ask the user to
+              // turn it on.
               if (
                 screenVision
                 && !voiceScreenVisionTriggered
+                && privacyControls.isScreenShareActive(connectionId)
                 && detectScreenVisionIntent(voiceScreenIntentText)
               ) {
                 voiceScreenVisionTriggered = true;
@@ -2787,6 +2874,7 @@ async function startServer() {
                       fc.args as Record<string, unknown>,
                       {
                         correlationId: `${connectionId}:${fc.id}`,
+                        connectionId,
                         projectRoot: process.env.SIYA_APP_ROOT || process.cwd(),
                       },
                     );
@@ -2904,7 +2992,8 @@ async function startServer() {
       // uses the same `callAgent` helper as the rest of the server, so the
       // function declarations and registration stay in lockstep.
       screenVision = new ScreenVisionPipeline({
-        callAgent: callDesktopAgent,
+        // Bound to this session: its captures need this session's Share screen.
+        callAgent: (tool, args) => callDesktopAgent(tool, args, undefined, { connectionId }),
         pushFrameToSession: ({ data, mimeType }) => {
           session.sendRealtimeInput({ video: { data, mimeType } });
           lastSharedScreenFrameAt = Date.now();
@@ -3003,23 +3092,13 @@ async function startServer() {
             clearTimeout(timeout);
           }
 
-          let screenSource = "recent shared screen";
-          let screenAvailable = now - lastSharedScreenFrameAt <= 25_000;
-          if (!screenAvailable) {
-            const screenshot = await callDesktopAgent("takeScreenshot", {
-              include_image: true,
-              max_dim: 640,
-            });
-            const payload = screenshot.result as Record<string, unknown> | undefined;
-            const image = typeof payload?.image_base64 === "string" ? payload.image_base64 : "";
-            if (screenshot.ok && image) {
-              session.sendRealtimeInput({
-                video: { data: image, mimeType: "image/jpeg" },
-              });
-              screenSource = "fresh desktop screenshot";
-              screenAvailable = true;
-            }
-          }
+          // Check-ins never capture the screen themselves. They can only use
+          // frames from a Share screen session the user started, which the
+          // model has already received.
+          const screenSource = "recent shared screen";
+          const screenAvailable = privacyControls.isScreenShareActive(connectionId)
+            && now - lastSharedScreenFrameAt <= 25_000;
+          const activityAllowed = privacyControls.isActivityAwarenessActive();
 
           const idleSeconds = observation
             ? Number(observation.userIdleSeconds || 0)
@@ -3061,9 +3140,9 @@ async function startServer() {
               thought: mode === "idle_away"
                 ? "The user has been quiet and may have stepped away. Check the latest screen before making one playful, non-repetitive presence remark."
                 : "The user is silently working. Inspect the latest screen and contribute one concrete observation, suggestion, pointed question, or light joke about the visible task.",
-              topic: observation?.activeWindow.title || situation.activeWindow || "current desktop activity",
-              application: observation?.activeWindow.application || situation.activeApp,
-              activeWindow: observation?.activeWindow.title || situation.activeWindow,
+              topic: (activityAllowed && (observation?.activeWindow.title || situation.activeWindow)) || "current desktop activity",
+              application: activityAllowed ? observation?.activeWindow.application || situation.activeApp : undefined,
+              activeWindow: activityAllowed ? observation?.activeWindow.title || situation.activeWindow : undefined,
               idleSeconds,
               presenceMode: mode,
               screenSource,
@@ -3141,18 +3220,39 @@ async function startServer() {
             session.sendRealtimeInput({
               audio: { data: msg.audio, mimeType: "audio/pcm;rate=16000" }
             });
-          } else if (msg.type === "video" && msg.video) {
+          } else if (msg.type === "screen_share") {
+            // The client reports every Share screen start, pause, resume and
+            // stop. Screen frames and screen tools are allowed only between an
+            // explicit start and the next stop.
+            const active = msg.active === true;
+            privacyControls.setScreenShare(connectionId, active);
+            if (!active) {
+              screenVision?.dispose();
+              lastSharedScreenFrameAt = 0;
+              // The local brain re-attaches its latest frame to later turns;
+              // drop it so nothing captured while sharing is sent afterwards.
+              // Gemini has no equivalent: frames it already received stay in
+              // that conversation's context.
+              (session as { clearVisualContext?: () => void }).clearVisualContext?.();
+            }
+            logCommand(`SCREEN_SHARE ${active ? "on" : "off"}`);
+          } else if (
+            msg.type === "video"
+            && msg.video
+            && (msg.source === "camera" || privacyControls.isScreenShareActive(connectionId))
+          ) {
             session.sendRealtimeInput({
               video: { data: msg.video, mimeType: "image/jpeg" }
             });
             const now = Date.now();
+            const isScreenFrame = msg.source !== "camera";
             const changeScore = Number(msg.changeScore);
             const heartbeat = msg.heartbeat === true;
-            lastSharedScreenFrameAt = now;
-            if (!heartbeat && Number.isFinite(changeScore) && changeScore >= 7) {
+            if (isScreenFrame) lastSharedScreenFrameAt = now;
+            if (isScreenFrame && !heartbeat && Number.isFinite(changeScore) && changeScore >= 7) {
               lastMeaningfulScreenChangeAt = now;
             }
-            if (now - lastScreenObservationAt >= 10_000) {
+            if (isScreenFrame && now - lastScreenObservationAt >= 10_000) {
               lastScreenObservationAt = now;
               void processCognitiveEvent({
                 type: "screen.frame_received",
@@ -3163,7 +3263,8 @@ async function startServer() {
               });
             }
             if (
-              !heartbeat
+              isScreenFrame
+              && !heartbeat
               && Number.isFinite(changeScore)
               && changeScore >= 16
               && now - lastVisualInitiativeAt >= 30_000
@@ -3295,7 +3396,8 @@ async function startServer() {
               // The Gemini Live SDK explicitly gives no ordering guarantee
               // when realtime video and client text are sent separately.
               const isScreenRequest = detectScreenVisionIntent(trimmed);
-              const screenFrame = screenVision && isScreenRequest
+              const screenAllowed = privacyControls.isScreenShareActive(connectionId);
+              const screenFrame = screenVision && isScreenRequest && screenAllowed
                 ? await screenVision.capture("intent")
                 : null;
               const recalled = await cognition.memories.retrieve({
@@ -3305,7 +3407,9 @@ async function startServer() {
                 minConfidence: 0.35,
               });
               const promptText = isScreenRequest && !screenFrame
-                ? `${trimmed}\n\nThe one-shot screen capture was unavailable. Say clearly that you could not access the screen, then ask the user to try again.`
+                ? screenAllowed
+                  ? `${trimmed}\n\nThe one-shot screen capture was unavailable. Say clearly that you could not access the screen, then ask the user to try again.`
+                  : `${trimmed}\n\n${SCREEN_OFF_MESSAGE}`
                 : trimmed;
               // Typed crisis language: the safety instruction rides in the same
               // turn so SIYA answers once, following the crisis protocol.
@@ -3386,6 +3490,7 @@ async function startServer() {
       
       clientWs.on("close", () => {
         console.log("Client disconnected, closing Gemini session");
+        privacyControls.endConnection(connectionId);
         unsubscribeInitiative();
         screenVision?.dispose();
         forgetScreenVision();
@@ -3446,8 +3551,9 @@ async function startServer() {
     // Kick off the desktop agent (probe + auto-spawn) immediately on boot.
     ensureDesktopAgent()
       .then(async () => {
-        await ensureDesktopObserver();
-        if (cognition.config.desktopAwarenessEnabled && desktopObserverUrl) desktopPerception.start();
+        // Finds the observer only if activity awareness is on, so nothing about
+        // the desktop is read at startup without it.
+        await applyActivityAwareness();
       })
       .catch((e) => console.warn(`[Desktop Agent] Boot probe failed: ${e?.message || e}`));
   });
@@ -3786,9 +3892,10 @@ function buildInitiativePrompt(outcome: CognitionOutcome): string {
   if (outcome.event.type === "internal.proactive_presence") {
     const mode = meta.presenceMode === "idle_away" ? "idle_away" : "active_task";
     const screenAvailable = meta.screenAvailable === true;
+    const activityAllowed = privacyControls.isActivityAwarenessActive();
     const desktopContext = [
-      typeof meta.application === "string" ? `app=${meta.application.slice(0, 160)}` : "",
-      typeof meta.activeWindow === "string" ? `window=${meta.activeWindow.slice(0, 260)}` : "",
+      activityAllowed && typeof meta.application === "string" ? `app=${meta.application.slice(0, 160)}` : "",
+      activityAllowed && typeof meta.activeWindow === "string" ? `window=${meta.activeWindow.slice(0, 260)}` : "",
       typeof meta.idleSeconds === "number" ? `input idle=${Math.round(meta.idleSeconds)}s` : "",
     ].filter(Boolean).join("; ");
     return [

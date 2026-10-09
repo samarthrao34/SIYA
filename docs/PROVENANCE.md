@@ -13,11 +13,15 @@ something, the row says **to confirm** and the author must fill it in.
 
 The repository begins at commit `b2e11ae` (2026-09-24), a snapshot taken
 after the code had been recovered from the author's own installer,
-`SIYA-Setup-1.0.1.exe`. Three different methods were used:
+`SIYA-Setup-1.0.1.exe`. According to the recovery notes committed in
+`b2e11ae` (`agent/README.md` and the file headers), three methods were used.
+These are records made during recovery, not independent proof; the installer
+and its sourcemap would be needed to verify them.
 
-1. **Backend (TypeScript): recovered verbatim from a sourcemap** embedded in
-   the installer's server bundle. Sourcemaps carry the original source text,
-   so these files are the original code, not an approximation.
+1. **Backend (TypeScript): recorded as recovered verbatim from a sourcemap**
+   embedded in the installer's server bundle. If the sourcemap carried the
+   source text, these files are the original code rather than an
+   approximation.
 2. **Frontend (React/TypeScript): de-minified** from the installer's
    minified Vite bundle, which had no sourcemap. Structure and behaviour were
    preserved; top-level names were restored by hand, and local variable names
@@ -151,10 +155,13 @@ between recovery and the first commit. **To confirm each:**
 
 ## AI assistance
 
-- All 27 commits up to the baseline carry a `Co-Authored-By: Claude` trailer:
-  recovery, porting, new features and documentation were done with Claude
-  Code. The paper should disclose this.
+- All 27 commits up to the baseline carry a `Co-Authored-By: Claude` trailer,
+  so those commits were made with Claude Code. A trailer does not show how much
+  of a change each contributor wrote, and it says nothing about the recovery
+  work done before this repository existed. **To confirm:** which tools were
+  used for recovery and porting, and how authorship should be described.
 - The original recovered `server.ts` sends `User-Agent: aistudio-build` on its
   Gemini calls (still present in `server/index.ts` and `server/memory.ts`).
-  This suggests the original application began from a Google AI Studio "Build"
-  app. **To confirm:** how the original application was created.
+  This marker is consistent with, but does not establish, an origin in Google AI
+  Studio's "Build" feature. **To confirm:** how the original application was
+  created.

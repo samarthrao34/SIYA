@@ -1,24 +1,23 @@
 // Client for Siya's private memory graph: a self-hosted markdown-graph
 // retrieval server (BM25 + heading/path match + recency + graph walk, no
-// embeddings, no LLM in the retrieval path). It is meant to be reachable only
-// over a private network such as a Tailscale tailnet.
+// embeddings, no LLM in the retrieval path), reached only over the tailnet.
 //
-// The server address and bearer token come from mobile/app/.env at build time
-// (see mobile/app/.env.example) and are never hardcoded in source. Without
-// them, memory calls fail fast and the app keeps working without memory.
+// The app holds no secret. Requests go to the memory gateway
+// (services/memory_gateway), which identifies this phone by its Tailscale
+// device identity and adds the server's token on the server side. Anything
+// compiled into this bundle can be extracted from the APK, so a token must
+// never be configured here. Without VITE_SIYA_MEMORY_URL, memory calls fail
+// fast and the app keeps working without memory.
 
 const MEMORY_BASE = (import.meta.env.VITE_SIYA_MEMORY_URL || "").replace(/\/$/, "");
-const MEMORY_TOKEN = import.meta.env.VITE_SIYA_BRAIN_TOKEN || "";
 
 function memoryUrl(path: string): string {
-  if (!MEMORY_BASE || !MEMORY_TOKEN) {
-    throw new Error("Memory server not configured (VITE_SIYA_MEMORY_URL / VITE_SIYA_BRAIN_TOKEN)");
-  }
+  if (!MEMORY_BASE) throw new Error("Memory gateway not configured (VITE_SIYA_MEMORY_URL)");
   return MEMORY_BASE + path;
 }
 
 function authHeaders(): Record<string, string> {
-  return { Authorization: `Bearer ${MEMORY_TOKEN}`, "Content-Type": "application/json" };
+  return { "Content-Type": "application/json" };
 }
 
 function slugify(title: string): string {
