@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/assets/brand/siya-logo-full.png" alt="SIYA" width="320" />
+  <img src="docs/images/siya-logo-rounded.png" alt="SIYA" width="320" />
 </p>
 
 <p align="center">
