@@ -1,7 +1,7 @@
 /*
  * SIYA Health Data Dashboard -- shows heart rate / SpO2 readings synced
- * from the paired smartwatch (see desktop_agent/tools_health.py and
- * server_health.ts). Follows the same visual language and panel-shell
+ * from the paired smartwatch (see services/desktop_agent/tools_health.py and
+ * server/health.ts). Follows the same visual language and panel-shell
  * pattern as SettingsPanel.tsx / MemoriesPanel.tsx (dark glass, cyan accents,
  * mono uppercase labels, motion/react slide+fade), just wider to fit charts.
  */

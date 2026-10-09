@@ -18,13 +18,11 @@
   },
   "include": [
     "src/**/*.ts",
-    "src/**/*.tsx"
+    "src/**/*.tsx",
+    "shared/**/*.ts"
   ],
   "exclude": [
     "node_modules",
-    "dist",
-    "cognition",
-    "api_hub",
-    "server*.ts"
+    "dist"
   ]
 }

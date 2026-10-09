@@ -12,8 +12,8 @@
  */
 // @ts-nocheck
 import {loadSettings} from '../settings/settingsStore';
-import {publishAvatarEvent} from '../../runtime/avatarEvents.js';
-import {amplitudeFrames} from '../../runtime/speechTimeline.js';
+import {publishAvatarEvent} from '../../shared/runtime/avatarEvents.js';
+import {amplitudeFrames} from '../../shared/runtime/speechTimeline.js';
 
 // Audio codec helpers (PCM16 <-> Float32, base64 <-> ArrayBuffer) for the
 // Gemini Live mic/playback pipeline. These were missing entirely from the
@@ -346,7 +346,7 @@ export class LiveSession {
                       : r.status === "session_closed" && this.retryConnection()));
                 return;
               }
-              // Crisis-language safety net (server_safety.ts): SafetyCard.tsx shows the helplines.
+              // Crisis-language safety net (server/safety.ts): SafetyCard.tsx shows the helplines.
               if (r.type === 'safety') {
                 window.dispatchEvent(new CustomEvent('siya:safety', { detail: r }));
                 return;

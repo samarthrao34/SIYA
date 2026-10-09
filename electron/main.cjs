@@ -3,7 +3,7 @@
  * ---------------------------------------------------------------------------
  * Responsibilities in this phase:
  *   1. Enforce a single running instance.
- *   2. Launch the existing Node backend (server.ts, bundled to dist/server.cjs)
+ *   2. Launch the existing Node backend (server/index.ts, bundled to dist/server.cjs)
  *      silently as a child process — no console window, no browser tab.
  *   3. Show a splash window while the backend boots, then load the real UI
  *      (http://localhost:3000) into the main application window.
@@ -125,7 +125,7 @@ if (!gotSingleInstanceLock) {
 // ---------------------------------------------------------------------------
 /**
  * Per-install key for encrypting SIYA's personal data at rest (see
- * server_secureStore.ts). The key itself is sealed with the OS keyring via
+ * server/secureStore.ts). The key itself is sealed with the OS keyring via
  * safeStorage and stored as data-key.bin in userData; the backend only ever
  * receives it in its environment. Losing this file makes the encrypted data
  * unreadable, so it is never deleted by "delete all my data".

@@ -1,6 +1,7 @@
 # Dependencies and build output
 node_modules/
 dist/
+release/
 agent_dist/
 mobile/build/
 mobile/webapp-dist/
@@ -9,13 +10,13 @@ __pycache__/
 
 # Python environments and downloaded voice models
 .venv*/
-local_voice/.venv*/
-local_voice/models/
-local_voice/samples/
+services/local_voice/models/
+services/local_voice/samples/
 
 # Secrets, keys and signed builds -- never commit these
 .env
 .env.*
+!.env.example
 secrets.json
 *.keystore
 *.keystore.bak

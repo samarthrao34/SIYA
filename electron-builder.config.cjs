@@ -8,7 +8,7 @@ module.exports = {
   productName: 'SIYA',
   asar: false,
   directories: { output: 'release' },
-  files: ['dist/**/*', 'electron/**/*', 'build/icon.png', 'package.json', 'desktop_agent/**/*.py'],
+  files: ['dist/**/*', 'electron/**/*', 'build/icon.png', 'package.json', 'services/desktop_agent/**/*.py'],
   linux: { target: ['AppImage'], category: 'Utility', icon: 'build/icon.png' },
   win: { target: ['nsis'] },
   mac: { target: ['dmg', 'zip'], category: 'public.app-category.utilities' },

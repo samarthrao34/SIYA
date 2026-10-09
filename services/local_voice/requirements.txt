@@ -1,0 +1,17 @@
+# Offline voice service for SIYA's local brain (services/local_voice/server.py).
+# Create the venv the server expects:
+#   python3 -m venv services/local_voice/.venv
+#   services/local_voice/.venv/bin/pip install -r services/local_voice/requirements.txt
+# Models go in services/local_voice/models/: silero_vad.onnx,
+# kokoro-v1.0.onnx and voices-v1.0.bin.
+fastapi
+uvicorn[standard]
+pydantic
+numpy
+onnxruntime
+soxr
+soundfile
+# SIYA_TTS_ENGINE=edge (default): natural Hindi/English voice, needs network
+edge-tts
+# SIYA_TTS_ENGINE=kokoro: fully offline on the CPU
+kokoro-onnx

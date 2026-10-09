@@ -29,8 +29,7 @@ This does not bundle a generative motion model.
 
 ```sh
 npm test
-npm run typecheck
-npm run typecheck:frontend
+npm run typecheck   # server, desktop UI and mobile app
 npm run build
 ```
 

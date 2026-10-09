@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
@@ -12,6 +16,13 @@
     "noImplicitAny": false,
     "noEmit": true
   },
-  "include": ["mobile-app/**/*.ts", "mobile-app/**/*.tsx"],
-  "exclude": ["node_modules", "dist", "mobile"]
+  "include": [
+    "mobile/app/**/*.ts",
+    "mobile/app/**/*.tsx",
+    "shared/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

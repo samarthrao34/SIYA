@@ -22,12 +22,12 @@ for required in "$JAVA_ROOT/bin/javac" "$JAVA_ROOT/bin/jar" "$TOOLS/aapt2" "$TOO
   fi
 done
 
-# Standalone web bundle (talks to Gemini directly, no server.ts involved) --
+# Standalone web bundle (talks to Gemini directly, no server/index.ts involved) --
 # packed into assets/www/ and served to the WebView over 127.0.0.1 by
 # AssetServer.java. mediapipe/models power the on-device camera emotion
 # detector (see mobileLiveSession.ts startCamera/sendCameraFrame) and are
 # kept; they add ~37MB to the APK.
-(cd "$PROJECT_DIR" && npm run build:mobile-app)
+(cd "$PROJECT_DIR" && npm run build:mobile)
 ASSETS_DIR="$SOURCE_DIR/assets"
 rm -rf "$ASSETS_DIR"
 mkdir -p "$ASSETS_DIR/www"

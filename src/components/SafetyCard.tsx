@@ -1,6 +1,6 @@
 /*
  * Helpline card shown when the backend's crisis-language check fires
- * (server_safety.ts -> {type: "safety"} over the live socket, re-broadcast by
+ * (server/safety.ts -> {type: "safety"} over the live socket, re-broadcast by
  * liveSession.ts as the "siya:safety" window event). SIYA also says the
  * numbers aloud; the card makes sure they can be read, not just heard. It
  * stays until the user closes it.

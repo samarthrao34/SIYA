@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "module": "commonjs",
     "moduleResolution": "node",
     "esModuleInterop": true,
@@ -11,6 +14,12 @@
     "noEmit": true,
     "outDir": "dist"
   },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules", "dist", "src", "docs/originals", "vite.config.ts", "vite.mobile.config.ts", "mobile-app", "mobile"]
+  "include": [
+    "server/**/*.ts",
+    "shared/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

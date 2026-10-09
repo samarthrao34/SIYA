@@ -7,16 +7,26 @@
   "version": "1.0.1",
   "type": "module",
   "main": "electron/main.cjs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samarthrao34/SIYA.git"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "typecheck:frontend": "tsc --noEmit -p tsconfig.app.json",
-    "typecheck:mobile": "tsc --noEmit -p tsconfig.mobile.json",
-    "dev": "vite",
-    "build": "vite build && npm run build:server",
-    "build:mobile-app": "vite build --config vite.mobile.config.ts",
-    "build:server": "esbuild server.ts --bundle --platform=node --format=cjs --target=node18 --outfile=dist/server.cjs --external:express --external:ws --external:dotenv --external:@google/genai --external:vite --sourcemap",
+    "dev": "tsx server/index.ts",
+    "dev:ui": "vite",
+    "build": "npm run build:ui && npm run build:server",
+    "build:ui": "vite build",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=cjs --target=node18 --outfile=dist/server.cjs --external:express --external:ws --external:dotenv --external:@google/genai --external:vite --sourcemap",
+    "build:mobile": "vite build --config vite.mobile.config.ts",
     "start": "electron .",
-    "test": "node --import tsx --test scripts/test_*.mjs",
+    "test": "node --import tsx --test \"tests/*.test.mjs\"",
+    "typecheck": "npm run typecheck:server && npm run typecheck:ui && npm run typecheck:mobile",
+    "typecheck:server": "tsc --noEmit -p tsconfig.json",
+    "typecheck:ui": "tsc --noEmit -p tsconfig.app.json",
+    "typecheck:mobile": "tsc --noEmit -p tsconfig.mobile.json",
     "package": "npm run build && electron-builder --config electron-builder.config.cjs --publish never"
   },
   "dependencies": {
@@ -43,6 +53,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "electron": "^44.1.1",
     "electron-builder": "^26.15.3",
+    "esbuild": "0.28.2",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
