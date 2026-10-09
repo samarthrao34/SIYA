@@ -18,6 +18,9 @@ unshare --kill-child -r -n -p -f --mount-proc bash tests/e2e-privacy/run.sh "$PW
 unshare --kill-child -r -n -p -f --mount-proc bash tests/e2e-privacy/consent.sh "$PWD" /tmp/siya-consent
 ```
 
+Run it in a clean clone with no `.env`: the server loads `.env` from its
+working directory, and the harness must never see real keys.
+
 Needs user namespaces, `curl` and (for `consent.sh`) Chromium. It is not part
 of `npm test`. On Linux the server never uses Electron's capture path (see
 `captureViaElectron`), so the `ipc` mode exercises the same agent path.
