@@ -27,10 +27,13 @@ are doing through your camera and your words, remembers what matters to you,
 and can act on your computer when you ask: open apps, manage files, read your
 screen, search the web.
 
-Privacy comes first. Each user brings their own Gemini API key. Emotion
-sensing runs on-device. Personal data is encrypted at rest with a key held in
-the OS keyring. For a fully offline setup, a local brain (Gemma + local
-speech) can replace Gemini entirely.
+Each user brings their own Gemini API key, and there is no SIYA-run server.
+In the default mode, your voice, messages and (while you turn them on) camera
+and screen images are sent to Google Gemini; see
+[docs/DATA_FLOWS.md](docs/DATA_FLOWS.md) for exactly what leaves the device.
+Face and hand analysis runs on-device, and stored memories are encrypted with
+a key held in the OS keyring. A local mode (Gemma + local speech) keeps the
+conversation on the machine.
 
 ## Features
 
@@ -38,7 +41,7 @@ speech) can replace Gemini entirely.
 | --- | --- |
 | **Live conversation** | Full-duplex voice and text over Gemini Live, with interruption, reconnect with backoff, wake word, and time-of-day greetings. |
 | **3D avatar** | SIYA's own VRoid (VRM) model, rendered with Three.js: lip-sync from the audio stream, gaze, idle behaviour, procedural gestures, expressions and physics. |
-| **Emotion & behaviour sensing** | MediaPipe face and hand landmarks, run locally in WASM, read facial emotion plus longer-term cues such as yawning, fatigue, head-in-hands and fidgeting. Optional text-emotion reading of the user's words. |
+| **Emotion & behaviour sensing** | MediaPipe face and hand landmarks, run locally in WASM, read facial emotion plus longer-term cues such as yawning, fatigue, head-in-hands and fidgeting. The resulting labels are shared with the model. Optional text-emotion reading of the user's words via TypeSafe. |
 | **Memory** | Long-term memories consolidated from conversations, browsable and editable in the Memories panel. |
 | **Cognition** | An autonomous layer for attention, goals, planning, curiosity, social initiative, proactive check-ins, and a critic that reviews tool use. |
 | **Desktop control** | 60+ tools through a local Python agent: apps and windows, files, mouse and keyboard, clipboard, screenshots and OCR, volume and brightness, web search, and power actions with two-step confirmation. |
@@ -277,18 +280,29 @@ Conventions:
 
 ## Privacy & safety
 
-- **Your key, your data.** No SIYA-operated backend. Requests go from your
-  machine to Gemini with your own key. The two optional services that send
-  text elsewhere (TypeSafe text-emotion, Edge TTS in local mode) are marked
-  in `.env.example` and can be turned off.
-- **Encrypted at rest.** Memories, goals and session state
-  are encrypted with AES-256-GCM. The key is sealed in the OS keyring via
-  Electron `safeStorage`.
-- **On-device perception.** Camera frames are analysed locally. Only derived
-  emotion and behaviour states reach the model.
-- **Consent and control.** A first-run consent and age gate, a Privacy Center
-  that explains what is stored and offers "delete all my data", and two-step
-  confirmation for destructive desktop actions.
+The full map of what leaves the device, who receives it and what is stored is
+in [docs/DATA_FLOWS.md](docs/DATA_FLOWS.md). In short:
+
+- **Sent to Google Gemini (default mode).** Your voice and typed messages; a
+  camera still every 2.5 s while the camera is on, plus the expression and
+  behaviour labels read from it; screen images while screen sharing is on;
+  the active app name and window title for proactive check-ins (desktop
+  awareness, on by default); recent conversation for memory updates. On
+  Gemini's free tier, Google may use this data to improve its products.
+- **Sent to TypeSafe (optional).** What you say or type, to read its emotional
+  tone, only when `TYPESAFE_API_KEY` is set and never in local mode.
+- **Local mode.** Conversation, camera and screen stay on the machine. With
+  the default Edge voice, SIYA's own replies go to Microsoft for speech
+  synthesis; `SIYA_TTS_ENGINE=kokoro` keeps speech offline.
+- **Processed on-device only.** Face and hand landmarks, crisis-language
+  detection, OCR. Camera images and voice audio are never written to disk.
+- **Stored on the device.** Memories, goals and last-session notes, encrypted
+  with AES-256-GCM (key sealed in the OS keyring via Electron `safeStorage`).
+  Settings, logs, learned skills and the Gemini key file are not encrypted.
+- **Consent and control.** A first-run consent and age gate that lists the
+  flows active in the current setup, a Privacy Center with "delete all my
+  data", and two-step confirmation for destructive desktop actions. Deleting
+  cannot recall data already sent to Google or TypeSafe.
 - **Crisis safety net.** Deterministic detection on every message, independent
   of the model, shows helpline numbers on screen.
 
@@ -298,6 +312,8 @@ care.
 ## Further reading
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the pieces fit together
+- [docs/DATA_FLOWS.md](docs/DATA_FLOWS.md): what data leaves the device, where it goes, what is stored
+- [docs/PROVENANCE.md](docs/PROVENANCE.md): which code was recovered, reconstructed, modified or newly written, and third-party components
 - [docs/RELIABILITY.md](docs/RELIABILITY.md): reconnects, tray behaviour, updates and packaging
 
 ## License
