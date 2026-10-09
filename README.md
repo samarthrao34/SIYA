@@ -73,42 +73,71 @@ deeper walkthrough.
 
 ## Roadmap: a physical body for SIYA
 
-SIYA lives on screen today. We are building a **physical robot** so she can
-share your space as well: a head that looks at you, a face that shows what she
-feels, and arms that gesture while she talks. This is active, ongoing work.
-The architecture below is the plan we are building towards; none of the robot
-side ships yet.
+<p align="center">
+  <img src="docs/images/siya-robot-concept.png" alt="Concept render of the SIYA companion robot" width="360" />
+  <br/><sub>Concept render of SIYA's companion robot</sub>
+</p>
 
-The idea is that the robot is **a second body for the same SIYA**, not a
-separate product. The brain, memory, personality and safety stay in the
-existing backend. The animation signals that drive the 3D avatar today
-(speaking state, lip-sync visemes, expressions, gaze, gestures; see
-`shared/runtime/`) will drive motors as well.
+SIYA lives on screen today. We are building a **companion robot** so she can
+share your space as well. This is active, ongoing work. The design and
+architecture below are what we are building towards; none of the robot side
+ships yet.
+
+### The design
+
+A friendly, rounded, wheeled companion about the size of a small bin, with a
+soft cream shell and gold accents. SIYA's face is not mechanical: **her
+VRoid avatar lives on a large portrait display** at the front, so every
+expression, glance and word she has on the desktop carries over to the robot.
+
+| Part | Role |
+| --- | --- |
+| **Portrait display** | Renders SIYA's 3D avatar with live lip-sync, gaze and expressions, using the same character engine as the desktop app. |
+| **Stereo camera array** (above the display) | Depth vision for seeing and recognising the person she is talking to, reading emotion and behaviour, and navigation. Flanking sensors add ambient light and proximity. |
+| **Side speakers with light rings** | SIYA's voice, with gold rings that glow and pulse as she speaks. |
+| **Microphones** | Far-field listening and wake word, so you can talk to her from across the room. |
+| **Star beacon** | A glowing star on top that shows her state at a glance: listening, thinking, speaking, or asleep. |
+| **Base light band** | An ambient glow around the base that reflects mood and status. |
+| **Front sensor** | Obstacle and edge detection for safe movement. |
+| **Wheeled base** | Lets her come to you, follow you between rooms, face whoever is speaking, and return to her charging dock. |
+
+### Architecture
+
+The robot is **a second body for the same SIYA**, not a separate product.
+Her brain, memory, personality and safety stay in the existing backend. The
+display runs the existing avatar renderer, and the signals that animate her
+today (speaking state, lip-sync visemes, expressions, gaze; see
+`shared/runtime/`) also drive the robot's lights and movement.
 
 ```mermaid
 flowchart LR
   subgraph Today["Today"]
     Brain["SIYA backend<br/>server/<br/>(conversation, memory,<br/>cognition, safety)"]
-    Events["Avatar events<br/>shared/runtime/<br/>state · visemes ·<br/>expression · gaze · gesture"]
+    Events["Avatar events<br/>shared/runtime/<br/>state · visemes ·<br/>expression · gaze"]
     Avatar["3D avatar<br/>src/character/"]
     Brain --> Events --> Avatar
   end
 
-  subgraph Future["In development: physical body"]
+  subgraph Robot["In development: companion robot"]
     Bridge["Embodiment bridge<br/>(planned server module)"]
-    Controller["Robot controller<br/>(onboard)"]
-    Motion["Head & neck · arms & hands"]
-    Face["Expressive face"]
-    Senses["Camera · microphones · touch"]
-    Safety["Motion safety<br/>limits · e-stop · consent"]
+    Controller["Onboard controller"]
+    Display["Portrait display<br/>SIYA's avatar"]
+    Voice["Speakers + light rings<br/>microphones"]
+    Lights["Star beacon<br/>base light band"]
+    Base["Wheeled base<br/>+ charging dock"]
+    Senses["Stereo cameras<br/>front sensor"]
+    Safety["Motion safety<br/>speed limits · e-stop"]
     Bridge --> Controller
-    Controller --> Motion
-    Controller --> Face
+    Controller --> Display
+    Controller --> Voice
+    Controller --> Lights
+    Controller --> Base
     Senses --> Controller
-    Safety -.- Controller
+    Safety -.- Base
   end
 
   Events -. "same event stream" .-> Bridge
+  Avatar -. "same renderer" .-> Display
   Controller -. "what the robot<br/>sees and hears" .-> Brain
 ```
 
@@ -116,13 +145,14 @@ flowchart LR
 
 | # | Milestone | What it unlocks |
 | --- | --- | --- |
-| 1 | **Embodiment protocol** | A versioned, transport-neutral event stream (state, speech timing, visemes, expressions, gaze, gestures) published from the backend, so any body can subscribe. |
-| 2 | **Head and face** | Physical lip-sync, gaze that follows you, and facial expressions, all driven by the same events as the 3D avatar. |
-| 3 | **Embodied perception** | The robot's own camera and microphones feed SIYA's existing emotion, behaviour and voice pipelines. |
-| 4 | **Gesture and motion** | Arm and hand gestures timed to speech, reusing the avatar's procedural gesture system. |
-| 5 | **Safety and autonomy** | Hard motion limits, an emergency stop, consent rules for movement, and proactive presence in the room. |
+| 1 | **Embodiment protocol** | A versioned, transport-neutral event stream (state, speech timing, visemes, expressions, gaze) from the backend, so any body can subscribe. |
+| 2 | **SIYA on the display** | A full-screen build of the avatar for the robot's portrait display, with lip-sync and expressions driven live. |
+| 3 | **Voice and light** | Far-field microphones and speakers, with the star beacon, speaker rings and base band mapped to listening, thinking, speaking and mood. |
+| 4 | **Embodied perception** | The stereo cameras feed SIYA's existing emotion and behaviour pipelines, so she can tell who is in front of her and how they are doing. |
+| 5 | **Mobility** | Turn to face whoever is speaking, come when called, follow between rooms, avoid obstacles, and dock to charge. |
+| 6 | **Safety and autonomy** | Speed limits, edge and obstacle stops, an emergency stop, consent rules for when she may move, and proactive presence in the room. |
 
-Hardware choices are still being evaluated and will be documented as each
+Hardware components are still being evaluated and will be documented as each
 milestone lands.
 
 ## Repository layout
@@ -159,7 +189,7 @@ SIYA/
 │   └── connect-phone.sh    adb reverse so the phone reaches the desktop backend
 ├── public/                 Static assets: avatar models, MediaPipe WASM + models, brand
 ├── tests/                  Node test runner suites (desktop shell, live session, speech…)
-├── docs/                   Architecture and reliability notes
+├── docs/                   Architecture and reliability notes, robot concept art
 ├── build/                  App icon used by electron-builder
 └── .github/workflows/      CI: typecheck, tests, build
 ```

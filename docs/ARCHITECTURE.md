@@ -98,9 +98,13 @@ on `127.0.0.1`. The script then compiles and signs the APK without Gradle.
 
 ## Future: physical embodiment
 
-A physical robot body for SIYA is in development. It will subscribe to the
-same avatar event stream (`shared/runtime/avatarEvents.js`) through a planned
-embodiment bridge in the backend, so the 3D avatar and the robot stay in sync
-and share one brain, memory and safety layer. See the roadmap in the
+A wheeled companion robot for SIYA is in development (concept:
+`docs/images/siya-robot-concept.png`). Her face is the existing VRoid avatar
+on a portrait display, so the robot reuses the character engine directly. A
+planned embodiment bridge in the backend will publish the avatar event stream
+(`shared/runtime/avatarEvents.js`) to the robot, where the same state, speech
+and expression events also drive its star beacon, light rings and motion.
+The robot's stereo cameras and microphones feed back into the existing
+perception and voice pipelines, so there is one brain, one memory and one
+safety layer for both bodies. See the roadmap in the
 [README](../README.md#roadmap-a-physical-body-for-siya).
-
