@@ -73,7 +73,9 @@ test('an empty allowlist refuses to start', () => {
 
 test('oversized bodies are refused', async () => {
   await withGateway({ whois: async () => ({ device: 'siya-phone', login: 'x' }) }, async (base, calls) => {
-    const res = await fetch(`${base}/ingest`, { method: 'POST', body: 'x'.repeat(1_100_000) }).catch(() => null);
+    const res = await fetch(`${base}/ingest`, { method: 'POST', body: 'x'.repeat(1_100_000), signal: AbortSignal.timeout(5_000) })
+      .catch((error) => (error?.name === 'TimeoutError' ? 'hung' : null));
+    assert.notEqual(res, 'hung', 'the gateway must not leave an oversized upload hanging');
     assert.ok(!res || res.status === 413);
     assert.equal(calls.length, 0);
   });

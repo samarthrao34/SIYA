@@ -99,7 +99,13 @@ export function createGatewayHandler({
     let size = 0;
     for await (const chunk of req) {
       size += chunk.length;
-      if (size > MAX_BODY_BYTES) return deny(res, 413, "Request too large.", identity.device);
+      if (size > MAX_BODY_BYTES) {
+        // Answer, then drop the connection so the client stops uploading.
+        res.setHeader("Connection", "close");
+        deny(res, 413, "Request too large.", identity.device);
+        req.destroy();
+        return;
+      }
       chunks.push(chunk);
     }
 
