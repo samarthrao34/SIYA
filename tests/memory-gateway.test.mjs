@@ -80,3 +80,12 @@ test('oversized bodies are refused', async () => {
     assert.equal(calls.length, 0);
   });
 });
+
+test('a failed identity lookup is not cached', async () => {
+  let attempts = 0;
+  const whois = async () => (++attempts === 1 ? null : { device: 'siya-phone', login: 'x' });
+  await withGateway({ whois }, async (base) => {
+    assert.equal((await fetch(`${base}/query`, { method: 'POST', body: '{}' })).status, 403);
+    assert.equal((await fetch(`${base}/query`, { method: 'POST', body: '{}' })).status, 200);
+  });
+});

@@ -35,21 +35,61 @@ const MAX_BODY_BYTES = 1_000_000;
 const UPSTREAM_TIMEOUT_MS = 20_000;
 const WHOIS_TTL_MS = 60_000;
 
-/** `tailscale whois --json <addr>` → { device, login } or null if unknown. */
-export function tailscaleWhois(address) {
+function identityFrom(info) {
+  const device = String(info?.Node?.ComputedName || info?.Node?.Name || "").split(".")[0].toLowerCase();
+  const login = String(info?.UserProfile?.LoginName || "").toLowerCase();
+  return device ? { device, login } : null;
+}
+
+/**
+ * Asks tailscaled's local API which device owns a tailnet address. This is
+ * the same lookup `tailscale whois` makes, without starting the CLI (which can
+ * stall for seconds inside a hardened systemd unit).
+ */
+export function localApiWhois(address, socketPath = process.env.TAILSCALE_SOCKET || "/run/tailscale/tailscaled.sock") {
   return new Promise((resolve) => {
-    execFile("tailscale", ["whois", "--json", address], { timeout: 3_000 }, (error, stdout) => {
+    const req = http.get(
+      {
+        socketPath,
+        path: `/localapi/v0/whois?addr=${encodeURIComponent(address)}`,
+        headers: { Host: "local-tailscaled.sock" },
+        timeout: 2_000,
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => {
+          if (res.statusCode !== 200) return resolve(null);
+          try {
+            resolve(identityFrom(JSON.parse(body)));
+          } catch {
+            resolve(null);
+          }
+        });
+      },
+    );
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve(null));
+  });
+}
+
+/** `tailscale whois --json <addr>` → { device, login } or null if unknown. */
+export function cliWhois(address) {
+  return new Promise((resolve) => {
+    execFile("tailscale", ["whois", "--json", address], { timeout: 5_000 }, (error, stdout) => {
       if (error) return resolve(null);
       try {
-        const info = JSON.parse(stdout);
-        const device = String(info?.Node?.ComputedName || info?.Node?.Name || "").split(".")[0].toLowerCase();
-        const login = String(info?.UserProfile?.LoginName || "").toLowerCase();
-        resolve(device ? { device, login } : null);
+        resolve(identityFrom(JSON.parse(stdout)));
       } catch {
         resolve(null);
       }
     });
   });
+}
+
+/** Local API first, CLI as a fallback. */
+export async function tailscaleWhois(address) {
+  return (await localApiWhois(address)) || (await cliWhois(address));
 }
 
 /**
@@ -75,7 +115,9 @@ export function createGatewayHandler({
     const hit = cache.get(address);
     if (hit && now() - hit.at < WHOIS_TTL_MS) return hit.identity;
     const identity = await whois(address);
-    cache.set(address, { identity, at: now() });
+    // Only successful lookups are cached: a slow or failed lookup is retried
+    // on the next request instead of locking a device out for the TTL.
+    if (identity) cache.set(address, { identity, at: now() });
     return identity;
   }
 
