@@ -44,8 +44,8 @@ mkdir -p "$OUTPUT_DIR/compiled" "$OUTPUT_DIR/generated" "$OUTPUT_DIR/classes" "$
   -A "$ASSETS_DIR" \
   --min-sdk-version 29 \
   --target-sdk-version 36 \
-  --version-code 2 \
-  --version-name 1.1 \
+  --version-code 6 \
+  --version-name 1.5 \
   -o "$OUTPUT_DIR/siya-unsigned.apk" \
   "$OUTPUT_DIR/compiled/resources.zip"
 

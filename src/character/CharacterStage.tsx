@@ -51,6 +51,9 @@ export const CharacterViewport = ({
   controlsEnabled: f = !0,
   showControlHint: d = !0,
   reflectionStrength: g = 1,
+  landscapeFaceFocus = !1,
+  lookAround = !1,
+  mobileOptimized = !1,
 }) => {
   const m = L.useRef(null),
     y = L.useRef(null),
@@ -69,7 +72,32 @@ export const CharacterViewport = ({
       k.appendChild(U),
       (v.current = U));
     let W = !1;
-    const $ = getCharacterPreset(a),
+    const preset = getCharacterPreset(a),
+      $ = mobileOptimized
+        ? {
+            ...preset,
+            render: {
+              ...preset.render,
+              antialias: !1,
+              maxPixelRatio: 1,
+              targetFps: 24,
+              shadows: !1,
+            },
+            lighting: {
+              ...preset.lighting,
+              shadow: {
+                ...preset.lighting.shadow,
+                enabled: !1,
+                mapSize: 512,
+              },
+            },
+            physics: {
+              ...preset.physics,
+              frequency: 30,
+              maxSubSteps: 1,
+            },
+          }
+        : preset,
       ot = new CharacterEngine({
         canvas: U,
         config: $,
@@ -82,6 +110,7 @@ export const CharacterViewport = ({
         },
       });
     y.current = ot;
+    ot.setLookAround(lookAround);
     // Debug handle for visual checks of the avatar (e.g. gesture tuning).
     (window as any).__siyaEngine = ot;
     // Other parts of the app ask for gestures with a "siya:gesture" event.
@@ -143,7 +172,7 @@ export const CharacterViewport = ({
           v.current === U && (v.current = null));
       }
     );
-  }, [a]),
+  }, [a, mobileOptimized]),
     L.useEffect(() => {
       const k = v.current;
       k && (k.style.opacity = S.ratio >= 1 && !S.error ? "1" : "0");
@@ -157,6 +186,7 @@ export const CharacterViewport = ({
         if (!$) return;
         const { width: ot, height: lt } = $.contentRect;
         (xt = y.current) == null || xt.resize(ot, lt);
+        landscapeFaceFocus && y.current?.setFaceFocus(ot > lt);
       });
       return (U.observe(k), () => U.disconnect());
     }, []));
@@ -461,6 +491,9 @@ export const CharacterStage = ({
     animations = true,
     controlsEnabled = true,
     showControlHint = true,
+    landscapeFaceFocus = false,
+    lookAround = false,
+    mobileOptimized = false,
   }) => {
     const f = L.useRef(null),
       d = L.useRef(null),
@@ -590,6 +623,9 @@ export const CharacterStage = ({
               reflectionStrength: h,
               controlsEnabled,
               showControlHint,
+              landscapeFaceFocus,
+              lookAround,
+              mobileOptimized,
             }),
           }),
           b.jsx("canvas", {

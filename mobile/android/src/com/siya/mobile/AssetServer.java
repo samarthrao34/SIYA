@@ -119,7 +119,8 @@ final class AssetServer implements Runnable {
         if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
         if (lower.endsWith(".svg")) return "image/svg+xml";
         if (lower.endsWith(".woff2")) return "font/woff2";
-        if (lower.endsWith(".pmx") || lower.endsWith(".wasm")) return "application/octet-stream";
+        if (lower.endsWith(".wasm")) return "application/wasm";
+        if (lower.endsWith(".pmx")) return "application/octet-stream";
         return "application/octet-stream";
     }
 }

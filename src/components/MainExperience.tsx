@@ -15,11 +15,11 @@ import { LiveSession } from "../api/liveSession";
 import { CharacterStage } from "../character/CharacterStage";
 import { MemoriesPanel } from "./MemoriesPanel";
 import { SettingsPanel } from "./SettingsPanel";
-import { HealthDashboard } from "./HealthDashboard";
 import { loadSettings, saveSettings } from "../settings/settingsStore";
 import { WakeWordListener } from "../settings/wakeWordListener";
-import { Mic as $g, X as Is, Send as MS, Square as NS, RefreshCw as TS, Brain as Vo, Settings as ey, Pause as gS, Compass as gp, Volume2 as iy, Monitor as mS, CircleAlert as tS, Power as ty, Play as vS, Camera as cS, Activity as hp } from "lucide-react";
-import { ensureEmotionDetector, detectEmotion, EmotionSmoother } from "../vision/emotionDetector";
+import { Mic as $g, X as Is, Send as MS, Square as NS, RefreshCw as TS, Brain as Vo, Settings as ey, Pause as gS, Compass as gp, Volume2 as iy, Monitor as mS, CircleAlert as tS, Power as ty, Play as vS, Camera as cS } from "lucide-react";
+import { ensureEmotionDetector, classifyBlendshapes, EmotionSmoother } from "../vision/emotionDetector";
+import { BehaviorAnalyzer, ensureHandDetector } from "../vision/behaviorAnalyzer";
 
 export function MainExperience() {
   const [a, i] = L.useState("disconnected"),
@@ -46,7 +46,16 @@ export function MainExperience() {
     camIntervalRef = L.useRef(null),
     [detectedEmotion, setDetectedEmotion] = L.useState(null),
     emotionDetectorRef = L.useRef(null),
-    emotionSmootherRef = L.useRef(null);
+    emotionSmootherRef = L.useRef(null),
+    // Local ~4 Hz face/hand analysis (behaviorAnalyzer.ts). The 2.5 s camera
+    // frame to the server carries the latest emotion and behaviour readings.
+    [detectedBehavior, setDetectedBehavior] = L.useState(null),
+    handDetectorRef = L.useRef(null),
+    behaviorAnalyzerRef = L.useRef(null),
+    analysisIntervalRef = L.useRef(null),
+    analysisTickRef = L.useRef({ n: 0, hands: null, lastBehaviorAt: 0 }),
+    latestEmotionRef = L.useRef(null),
+    latestBehaviorRef = L.useRef(null);
   (L.useEffect(() => {
     X.current = r;
   }, [r]),
@@ -60,6 +69,7 @@ export function MainExperience() {
       () => () => {
         Y.current && clearInterval(Y.current);
         camIntervalRef.current && clearInterval(camIntervalRef.current);
+        analysisIntervalRef.current && clearInterval(analysisIntervalRef.current);
         camStreamRef.current &&
           camStreamRef.current.getTracks().forEach((t) => {
             try {
@@ -231,23 +241,45 @@ export function MainExperience() {
         canvas.height = hh;
         ctx.drawImage(videoEl, 0, 0, w, hh);
         const jpeg = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
-        let emotion = null;
-        if (emotionDetectorRef.current) {
-          try {
-            const reading = detectEmotion(emotionDetectorRef.current, videoEl, performance.now());
-            if (reading) {
-              emotionSmootherRef.current || (emotionSmootherRef.current = new EmotionSmoother(3));
-              const smoothed = emotionSmootherRef.current.push(reading);
-              setDetectedEmotion(smoothed);
-              emotion = { label: smoothed.emotion, confidence: Number(smoothed.confidence.toFixed(2)) };
-            }
-          } catch (err) {
-            console.error("[Emotion] Detection failed:", err);
-          }
-        }
-        rn.current && rn.current.sendVideoFrame(jpeg, { changeScore: 20, ...(emotion ? { emotion } : {}) });
+        const emotion = latestEmotionRef.current,
+          behavior = latestBehaviorRef.current;
+        rn.current && rn.current.sendVideoFrame(jpeg, { changeScore: 20, ...(emotion ? { emotion } : {}), ...(behavior ? { behavior } : {}) });
       } catch (err) {
         console.error("[Camera] Failed drawing frame to canvas:", err);
+      }
+    },
+    analyzeCameraFrame = () => {
+      const videoEl = camVideoRef.current,
+        landmarker = emotionDetectorRef.current;
+      if (!videoEl || !landmarker || videoEl.videoWidth === 0 || videoEl.readyState < 2) return;
+      try {
+        const now = performance.now(),
+          tick = analysisTickRef.current;
+        const face = landmarker.detectForVideo(videoEl, now);
+        // Hands every other tick (~2 Hz) is plenty for held gestures.
+        tick.n += 1;
+        if (handDetectorRef.current && tick.n % 2 === 0) tick.hands = handDetectorRef.current.detectForVideo(videoEl, now);
+        behaviorAnalyzerRef.current || (behaviorAnalyzerRef.current = new BehaviorAnalyzer());
+        behaviorAnalyzerRef.current.push(face, tick.hands, now);
+        const categories = face.faceBlendshapes?.[0]?.categories;
+        if (categories && categories.length) {
+          emotionSmootherRef.current || (emotionSmootherRef.current = new EmotionSmoother(8));
+          const smoothed = emotionSmootherRef.current.push(classifyBlendshapes(categories));
+          const previous = latestEmotionRef.current;
+          latestEmotionRef.current = { label: smoothed.emotion, confidence: Number(smoothed.confidence.toFixed(2)) };
+          (!previous || previous.label !== smoothed.emotion) && setDetectedEmotion(smoothed);
+        }
+        if (now - tick.lastBehaviorAt >= 2000) {
+          tick.lastBehaviorAt = now;
+          const reading = behaviorAnalyzerRef.current.read(now);
+          if (reading) {
+            const previous = latestBehaviorRef.current;
+            latestBehaviorRef.current = { state: reading.state, confidence: Number(reading.confidence.toFixed(2)), cues: reading.cues };
+            (!previous || previous.state !== reading.state) && setDetectedBehavior(reading);
+          }
+        }
+      } catch (err) {
+        console.error("[Behavior] Camera analysis failed:", err);
       }
     },
     startCamera = async () => {
@@ -260,7 +292,7 @@ export function MainExperience() {
                 : {}),
               width: { ideal: 640 },
               height: { ideal: 480 },
-              frameRate: { ideal: 2 },
+              frameRate: { ideal: 8 },
             },
             audio: !1,
           }),
@@ -285,6 +317,13 @@ export function MainExperience() {
             emotionDetectorRef.current = landmarker;
           })
           .catch((err) => console.error("[Emotion] Failed to load face detector:", err));
+        ensureHandDetector()
+          .then((hands) => {
+            handDetectorRef.current = hands;
+          })
+          .catch((err) => console.error("[Behavior] Failed to load hand detector:", err));
+        analysisIntervalRef.current && clearInterval(analysisIntervalRef.current);
+        analysisIntervalRef.current = setInterval(analyzeCameraFrame, 250);
         camIntervalRef.current && clearInterval(camIntervalRef.current);
         camIntervalRef.current = setInterval(() => {
           sendCameraFrame();
@@ -311,8 +350,14 @@ export function MainExperience() {
         }),
         (camStreamRef.current = null));
       camVideoRef.current && (camVideoRef.current.pause(), (camVideoRef.current = null));
+      analysisIntervalRef.current && (clearInterval(analysisIntervalRef.current), (analysisIntervalRef.current = null));
       emotionSmootherRef.current = null;
+      behaviorAnalyzerRef.current = null;
+      analysisTickRef.current = { n: 0, hands: null, lastBehaviorAt: 0 };
+      latestEmotionRef.current = null;
+      latestBehaviorRef.current = null;
       setDetectedEmotion(null);
+      setDetectedBehavior(null);
       setCamOn(!1);
     },
     $ = () => {
@@ -460,22 +505,7 @@ export function MainExperience() {
     [Re, De] = L.useState(!1),
     [$t, En] = L.useState(() => loadSettings()),
     [ke, Pn] = L.useState(!1),
-    [healthOpen, setHealthOpen] = L.useState(!1),
-    [healthSyncStatus, setHealthSyncStatus] = L.useState(null),
     hl = L.useRef(!1);
-  L.useEffect(() => {
-    const handler = (evt) => {
-      setHealthSyncStatus(evt.detail);
-      if (evt.detail.status !== "checking") {
-        const token = evt.detail;
-        setTimeout(() => {
-          setHealthSyncStatus((current) => (current === token ? null : current));
-        }, 4000);
-      }
-    };
-    window.addEventListener("siya:health_sync_status", handler);
-    return () => window.removeEventListener("siya:health_sync_status", handler);
-  }, []);
   L.useEffect(() => {
     hl.current = ke;
   }, [ke]);
@@ -522,7 +552,7 @@ export function MainExperience() {
         const saved = await saveSettings(patch);
         En(saved);
         vt(null);
-        if ('voiceName' in patch || 'micDeviceId' in patch) rn.current?.restart();
+        if ('voiceName' in patch || 'micDeviceId' in patch || 'addressAs' in patch) rn.current?.restart();
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Settings could not be saved. Please try again.';
         setSettingsError(message);
@@ -778,38 +808,6 @@ export function MainExperience() {
                 ],
               }),
               b.jsxs("button", {
-                onClick: () => setHealthOpen(!healthOpen),
-                className: `flex items-center gap-1 transition text-[13px] font-medium tracking-normal cursor-pointer ${healthOpen ? "text-cyan-400 opacity-100 font-semibold" : "opacity-60 hover:opacity-100 text-white"}`,
-                title: "Health Data Dashboard",
-                children: [
-                  b.jsx(hp, { size: 13 }),
-                  b.jsx("span", {
-                    className: "hidden sm:inline",
-                    children: "Health",
-                  }),
-                  healthSyncStatus &&
-                    healthSyncStatus.status === "checking" &&
-                    b.jsx("span", {
-                      className:
-                        "ml-1 inline-block w-1 h-1 rounded-full bg-amber-400 animate-pulse",
-                      title: "SIYA is syncing your watch",
-                    }),
-                  healthSyncStatus &&
-                    healthSyncStatus.status === "success" &&
-                    b.jsx("span", {
-                      className:
-                        "ml-1 inline-block w-1 h-1 rounded-full bg-green-400 shadow-[0_0_5px_rgba(74,222,128,0.8)]",
-                      title: "Watch synced successfully",
-                    }),
-                  healthSyncStatus &&
-                    healthSyncStatus.status === "error" &&
-                    b.jsx("span", {
-                      className: "ml-1 inline-block w-1 h-1 rounded-full bg-rose-400",
-                      title: healthSyncStatus.error || "Couldn't sync the watch",
-                    }),
-                ],
-              }),
-              b.jsxs("button", {
                 onClick: () => De(!Re),
                 className:
                   "flex items-center gap-1 opacity-60 hover:opacity-100 text-white transition text-[13px] font-medium tracking-normal cursor-pointer",
@@ -867,6 +865,12 @@ export function MainExperience() {
                       className: "opacity-70 lowercase",
                       title: `confidence ${(detectedEmotion.confidence * 100).toFixed(0)}%`,
                       children: `· ${detectedEmotion.emotion}`,
+                    }),
+                  camOn && detectedBehavior && detectedBehavior.state !== "calm" && detectedBehavior.state !== "away" &&
+                    b.jsx("span", {
+                      className: "opacity-70 lowercase",
+                      title: detectedBehavior.cues.join(", "),
+                      children: `· ${detectedBehavior.state}`,
                     }),
                 ],
               }),
@@ -1331,11 +1335,6 @@ export function MainExperience() {
         saveError: settingsError,
         saving: settingsPending > 0,
         onChange: Za,
-        themeColor: Nt,
-      }),
-      b.jsx(HealthDashboard, {
-        isOpen: healthOpen,
-        onClose: () => setHealthOpen(!1),
         themeColor: Nt,
       }),
     ],

@@ -51,7 +51,7 @@ export function ensureEmotionDetector(): Promise<FaceLandmarker> {
 // required to sum to 1 -- each emotion's raw score is its own weighted
 // average, so different emotions stay comparable regardless of how many
 // blendshapes feed them.
-const EMOTION_WEIGHTS: Record<Exclude<Emotion, "neutral">, Record<string, number>> = {
+const EMOTION_WEIGHTS: Record<Exclude<Emotion, "neutral" | "angry">, Record<string, number>> = {
   happy: {
     mouthSmileLeft: 1,
     mouthSmileRight: 1,
@@ -64,14 +64,6 @@ const EMOTION_WEIGHTS: Record<Exclude<Emotion, "neutral">, Record<string, number
     browInnerUp: 0.5,
     mouthLowerDownLeft: 0.25,
     mouthLowerDownRight: 0.25,
-  },
-  angry: {
-    browDownLeft: 1,
-    browDownRight: 1,
-    noseSneerLeft: 0.4,
-    noseSneerRight: 0.4,
-    mouthPressLeft: 0.35,
-    mouthPressRight: 0.35,
   },
   surprised: {
     browOuterUpLeft: 0.8,
@@ -95,6 +87,32 @@ const EMOTION_WEIGHTS: Record<Exclude<Emotion, "neutral">, Record<string, number
   },
 };
 
+// Anger is scored separately: its one reliable blendshape is lowered brows,
+// and averaging that with sneer/lip-press (which barely move in most real
+// angry faces) diluted it below the server's 0.45 "strong emotion" bar, so
+// anger was never reported. Lowered brows carry the score; squint, pressed
+// lips and sneer add to it; a smile, raised inner brows (worry/sadness) or a
+// raised upper lip (disgust) pull it back down.
+function scoreAnger(get: (name: string) => number): number {
+  const avg = (a: string, b: string) => (get(a) + get(b)) / 2;
+  const browDown = avg("browDownLeft", "browDownRight");
+  const squint = avg("eyeSquintLeft", "eyeSquintRight");
+  const press = avg("mouthPressLeft", "mouthPressRight");
+  const sneer = avg("noseSneerLeft", "noseSneerRight");
+  const upperLip = avg("mouthUpperUpLeft", "mouthUpperUpRight");
+  const smile = avg("mouthSmileLeft", "mouthSmileRight");
+  // Many faces rest with slightly lowered brows; only lowering beyond that counts.
+  let score =
+    Math.max(0, browDown - 0.1) * 1.15
+    + Math.max(0, squint - 0.2) * 0.35
+    + press * 0.25
+    + sneer * 0.25
+    - get("browInnerUp") * 0.3
+    - upperLip * 0.4;
+  if (smile > 0.25) score *= 0.3;
+  return Math.max(0, Math.min(1, score));
+}
+
 // The winning emotion's score must clear this to count as a real read;
 // below it the face is closer to neutral than to any single expression.
 const CONFIDENCE_FLOOR = 0.18;
@@ -105,9 +123,11 @@ export function classifyBlendshapes(
   const byName = new Map(categories.map((c) => [c.categoryName, c.score]));
   const scores: Partial<Record<Emotion, number>> = {};
 
-  let best: Emotion = "neutral";
-  let bestScore = 0;
-  for (const emotion of Object.keys(EMOTION_WEIGHTS) as Array<Exclude<Emotion, "neutral">>) {
+  const angry = scoreAnger((name) => byName.get(name) ?? 0);
+  scores.angry = angry;
+  let best: Emotion = angry > 0 ? "angry" : "neutral";
+  let bestScore = angry;
+  for (const emotion of Object.keys(EMOTION_WEIGHTS) as Array<Exclude<Emotion, "neutral" | "angry">>) {
     const weights = EMOTION_WEIGHTS[emotion];
     let sum = 0;
     let weightSum = 0;

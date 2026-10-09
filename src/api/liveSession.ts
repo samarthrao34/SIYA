@@ -198,7 +198,10 @@ export class LiveSession {
                 );
               if (
                 ((this.inputAudioCtx = new r({ sampleRate: 16e3 })),
-                (this.outputAudioCtx = new r({ sampleRate: 24e3 })),
+                // "playback" latency gives the output a larger device buffer.
+                // The default ("interactive") underruns and crackles on
+                // PipeWire while the avatar and webcam load the renderer.
+                (this.outputAudioCtx = new r({ sampleRate: 24e3, latencyHint: "playback" })),
                 this.inputAudioCtx.state === "suspended" &&
                   (await this.inputAudioCtx.resume().catch(() => {})),
                 this.outputAudioCtx.state === "suspended" &&

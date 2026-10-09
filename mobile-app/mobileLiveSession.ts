@@ -15,7 +15,8 @@ import { publishAvatarEvent } from "../runtime/avatarEvents.js";
 import { amplitudeFrames } from "../runtime/speechTimeline.js";
 import { buildSystemInstruction, MOBILE_FUNCTION_DECLARATIONS } from "./persona";
 import { saveMemoryCard, updateProfileFact, recallMemory, formatRecalledMemory } from "./memoryClient";
-import { ensureEmotionDetector, detectEmotion, EmotionSmoother, type EmotionReading } from "../src/vision/emotionDetector";
+import { ensureEmotionDetector, classifyBlendshapes, EmotionSmoother, type EmotionReading } from "../src/vision/emotionDetector";
+import { BehaviorAnalyzer, type BehaviorReading } from "../src/vision/behaviorAnalyzer";
 
 function floatToPCM16(samples: Float32Array): ArrayBuffer {
   const buffer = new ArrayBuffer(samples.length * 2);
@@ -58,6 +59,7 @@ interface MobileLiveSessionCallbacks {
   onError: (message: string) => void;
   onCameraChange?: (on: boolean) => void;
   onEmotionChange?: (reading: EmotionReading | null) => void;
+  onBehaviorChange?: (reading: BehaviorReading | null) => void;
 }
 
 export class MobileLiveSession {
@@ -102,6 +104,15 @@ export class MobileLiveSession {
   private emotionSmoother: EmotionSmoother | null = null;
   private lastEmotionLabel: string | null = null;
   private lastEmotionNoteAt = 0;
+  // Behaviour reading on mobile uses the face graph only. A second hand
+  // MediaPipe graph costs too much GPU memory on older phones and competes
+  // directly with the avatar and live audio.
+  private behaviorAnalyzer: BehaviorAnalyzer | null = null;
+  private analysisInterval: ReturnType<typeof setInterval> | null = null;
+  private analysisTick = { n: 0, hands: null as any, lastBehaviorAt: 0 };
+  private lastBehaviorState: string | null = null;
+  private lastBehaviorNoteAt = 0;
+  private lastUserTurnAt = 0;
   camOn = false;
 
   constructor(
@@ -127,7 +138,7 @@ export class MobileLiveSession {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) throw new Error("Web Audio API is unavailable in this browser.");
       this.inputAudioCtx = new AudioCtx({ sampleRate: 16000 });
-      this.outputAudioCtx = new AudioCtx({ sampleRate: 24000 });
+      this.outputAudioCtx = new AudioCtx({ sampleRate: 24000, latencyHint: "playback" });
       if (this.inputAudioCtx.state === "suspended") await this.inputAudioCtx.resume().catch(() => {});
       if (this.outputAudioCtx.state === "suspended") await this.outputAudioCtx.resume().catch(() => {});
       this.outputGainNode = this.outputAudioCtx.createGain();
@@ -218,6 +229,9 @@ export class MobileLiveSession {
             this.liveReady = true;
             this.reconnectAttempts = 0;
             this.setState("listening");
+            // Phone vision follows the voice link: once SIYA is listening she
+            // should also be able to see, without a second manual action.
+            void this.startCamera();
           },
           onmessage: (message: LiveServerMessage) => {
             if (generation !== this.connectionGeneration) return;
@@ -300,7 +314,10 @@ export class MobileLiveSession {
     const userText =
       (message.serverContent as any)?.inputTranscription?.text ??
       (message.serverContent as any)?.userTurn?.parts?.[0]?.text;
-    if (userText) this.callbacks.onTranscription("user", userText);
+    if (userText) {
+      this.lastUserTurnAt = Date.now();
+      this.callbacks.onTranscription("user", userText);
+    }
 
     if (message.toolCall?.functionCalls) {
       for (const call of message.toolCall.functionCalls) {
@@ -373,6 +390,7 @@ export class MobileLiveSession {
     const trimmed = text.trim();
     if (!trimmed) return;
     if (this.currentState === "speaking") this.handleInterruption();
+    this.lastUserTurnAt = Date.now();
     this.geminiSession?.sendClientContent({ turns: [{ role: "user", parts: [{ text: trimmed }] }], turnComplete: true });
   }
 
@@ -477,7 +495,12 @@ export class MobileLiveSession {
     if (this.camOn) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 2 } },
+        video: {
+          facingMode: "user",
+          width: { ideal: 320, max: 480 },
+          height: { ideal: 240, max: 360 },
+          frameRate: { ideal: 5, max: 8 },
+        },
         audio: false,
       });
       const track = stream.getVideoTracks()[0];
@@ -492,7 +515,12 @@ export class MobileLiveSession {
       videoEl.playsInline = true;
       videoEl.play().catch((e) => console.error("Camera video play warning:", e));
       this.camVideoEl = videoEl;
-      track.onended = () => this.stopCamera();
+      track.onended = () => {
+        this.stopCamera();
+        if (this.currentState !== "disconnected") {
+          window.setTimeout(() => void this.startCamera(), 750);
+        }
+      };
       this.camOn = true;
       this.callbacks.onCameraChange?.(true);
 
@@ -501,10 +529,12 @@ export class MobileLiveSession {
           this.emotionDetectorRef = landmarker;
         })
         .catch((err) => console.error("[Emotion] Failed to load face detector:", err));
+      if (this.analysisInterval) clearInterval(this.analysisInterval);
+      this.analysisInterval = setInterval(() => this.analyzeCameraFrame(), 750);
 
       if (this.camInterval) clearInterval(this.camInterval);
-      this.camInterval = setInterval(() => this.sendCameraFrame(), 2500);
-      setTimeout(() => this.sendCameraFrame(), 500);
+      this.camInterval = setInterval(() => this.sendCameraFrame(), 5000);
+      setTimeout(() => this.sendCameraFrame(), 900);
     } catch (err: any) {
       console.error("Camera permission declined or missing API:", err);
       this.callbacks.onError(err?.message || "Could not access the camera.");
@@ -514,6 +544,11 @@ export class MobileLiveSession {
   stopCamera() {
     if (this.camInterval) clearInterval(this.camInterval);
     this.camInterval = null;
+    if (this.analysisInterval) clearInterval(this.analysisInterval);
+    this.analysisInterval = null;
+    this.behaviorAnalyzer = null;
+    this.analysisTick = { n: 0, hands: null, lastBehaviorAt: 0 };
+    this.lastBehaviorState = null;
     if (this.camStream) {
       this.camStream.getTracks().forEach((t) => {
         try {
@@ -528,6 +563,69 @@ export class MobileLiveSession {
     this.camOn = false;
     this.callbacks.onCameraChange?.(false);
     this.callbacks.onEmotionChange?.(null);
+    this.callbacks.onBehaviorChange?.(null);
+  }
+
+  private sendInternalNote(text: string) {
+    this.geminiSession?.sendClientContent({
+      turns: [{ role: "user", parts: [{ text }] }],
+      turnComplete: true,
+    });
+  }
+
+  // Local face + hand analysis. Emotion notes may arrive any time; behaviour
+  // notes only once the user has been quiet for 30 s and SIYA is not
+  // speaking, at most every 3 min, and never the same state twice in a row.
+  private analyzeCameraFrame() {
+    const videoEl = this.camVideoEl;
+    const landmarker = this.emotionDetectorRef;
+    if (!videoEl || !landmarker || videoEl.videoWidth === 0 || videoEl.readyState < 2 || this.currentState === "disconnected") return;
+    try {
+      const now = performance.now();
+      const tick = this.analysisTick;
+      const face = landmarker.detectForVideo(videoEl, now);
+      tick.n += 1;
+      if (!this.behaviorAnalyzer) this.behaviorAnalyzer = new BehaviorAnalyzer();
+      this.behaviorAnalyzer.push(face, tick.hands, now);
+
+      const categories = face.faceBlendshapes?.[0]?.categories;
+      if (categories?.length) {
+        if (!this.emotionSmoother) this.emotionSmoother = new EmotionSmoother(8);
+        const smoothed = this.emotionSmoother.push(classifyBlendshapes(categories));
+        const changed = smoothed.emotion !== this.lastEmotionLabel;
+        const strong = smoothed.emotion !== "neutral" && smoothed.confidence >= 0.45;
+        const wall = Date.now();
+        if (changed) {
+          this.lastEmotionLabel = smoothed.emotion;
+          this.callbacks.onEmotionChange?.(smoothed);
+        }
+        if (changed && strong && wall - this.lastEmotionNoteAt >= 20_000) {
+          this.lastEmotionNoteAt = wall;
+          this.sendInternalNote(`[internal note: on-device facial expression analysis now reads the user's face as ${smoothed.emotion} (confidence ${smoothed.confidence.toFixed(2)}). Only remark on it if it genuinely fits the moment -- never narrate that you are scanning or detecting their face.]`);
+        }
+      }
+
+      if (now - tick.lastBehaviorAt < 2000) return;
+      tick.lastBehaviorAt = now;
+      const reading = this.behaviorAnalyzer.read(now);
+      if (!reading) return;
+      this.callbacks.onBehaviorChange?.(reading);
+      if (reading.state === "calm" || reading.state === "away") {
+        this.lastBehaviorState = reading.state;
+        return;
+      }
+      const wall = Date.now();
+      const quiet = wall - this.lastUserTurnAt >= 30_000 && this.currentState === "listening" && this.activeSources.length === 0;
+      if (reading.state !== this.lastBehaviorState && reading.confidence >= 0.5 && quiet && wall - this.lastBehaviorNoteAt >= 3 * 60_000) {
+        this.lastBehaviorState = reading.state;
+        this.lastBehaviorNoteAt = wall;
+        const cues = reading.cues.length ? reading.cues.join("; ") : "their overall body language";
+        const reach = reading.state === "cheerful" ? "share in their good mood" : "ask how they are, or suggest a break, water or some rest";
+        this.sendInternalNote(`[internal note: the user has been quiet, but their behaviour on camera over the last few minutes suggests they are ${reading.state}: ${cues}. If it fits, reach out gently and warmly the way a caring friend who noticed would -- ${reach}. Never list what you observed or sound like you are monitoring them.]`);
+      }
+    } catch (err) {
+      console.error("[Behavior] Camera analysis failed:", err);
+    }
   }
 
   private sendCameraFrame() {
@@ -539,7 +637,7 @@ export class MobileLiveSession {
       const canvas = this.camCanvas;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
-      const MAX_DIM = 480;
+      const MAX_DIM = 320;
       let w = videoEl.videoWidth;
       let h = videoEl.videoHeight;
       if (w > MAX_DIM || h > MAX_DIM) {
@@ -554,37 +652,9 @@ export class MobileLiveSession {
       canvas.width = w;
       canvas.height = h;
       ctx.drawImage(videoEl, 0, 0, w, h);
-      const jpeg = canvas.toDataURL("image/jpeg", 0.6).split(",")[1];
+      const jpeg = canvas.toDataURL("image/jpeg", 0.48).split(",")[1];
       this.geminiSession?.sendRealtimeInput({ video: { data: jpeg, mimeType: "image/jpeg" } });
 
-      if (this.emotionDetectorRef) {
-        try {
-          const reading = detectEmotion(this.emotionDetectorRef, videoEl, performance.now());
-          if (reading) {
-            if (!this.emotionSmoother) this.emotionSmoother = new EmotionSmoother(3);
-            const smoothed = this.emotionSmoother.push(reading);
-            this.callbacks.onEmotionChange?.(smoothed);
-            const changed = smoothed.emotion !== this.lastEmotionLabel;
-            const strong = smoothed.emotion !== "neutral" && smoothed.confidence >= 0.45;
-            const now = Date.now();
-            if (changed) this.lastEmotionLabel = smoothed.emotion;
-            if (changed && strong && now - this.lastEmotionNoteAt >= 20_000) {
-              this.lastEmotionNoteAt = now;
-              this.geminiSession?.sendClientContent({
-                turns: [{
-                  role: "user",
-                  parts: [{
-                    text: `[internal note: on-device facial expression analysis now reads the user's face as ${smoothed.emotion} (confidence ${smoothed.confidence.toFixed(2)}). Only remark on it if it genuinely fits the moment -- never narrate that you are scanning or detecting their face.]`,
-                  }],
-                }],
-                turnComplete: true,
-              });
-            }
-          }
-        } catch (err) {
-          console.error("[Emotion] Detection failed:", err);
-        }
-      }
     } catch (err) {
       console.error("[Camera] Failed drawing frame to canvas:", err);
     }

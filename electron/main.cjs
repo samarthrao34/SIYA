@@ -163,13 +163,6 @@ function startBackend() {
   // folder — the install dir under Program Files is read-only.
   const dataDir = app.getPath('userData');
 
-  // Frozen Python desktop agent (bundled as an extraResource when packaged).
-  // In development this file won't exist, so the backend falls back to running
-  // the agent from source with a local Python interpreter.
-  const agentExe = app.isPackaged
-    ? path.join(process.resourcesPath, 'agent', 'siya-agent.exe')
-    : path.join(APP_ROOT, 'agent_dist', 'siya-agent', 'siya-agent.exe');
-
   const env = {
     ...process.env,
     NODE_ENV: 'production',
@@ -181,12 +174,9 @@ function startBackend() {
   const dataKey = loadDataKey(dataDir);
   if (dataKey) env.SIYA_DATA_KEY = dataKey;
   if (app.isPackaged) {
-    // The desktop agent uses this exact executable for the per-user Windows
+    // The desktop agent uses this exact executable for the per-user
     // auto-start entry. It must never point at source scripts or Python.
     env.SIYA_EXECUTABLE = process.execPath;
-  }
-  if (fs.existsSync(agentExe)) {
-    env.SIYA_AGENT_EXE = agentExe;
   }
 
   serverProcess = spawn(process.execPath, [SERVER_ENTRY], {

@@ -315,7 +315,7 @@ export function SettingsPanel({
                                 className:
                                   "text-[7px] font-mono text-emerald-300/80",
                                 children:
-                                  "Siya will auto-launch on next Windows login.",
+                                  "Siya will auto-launch on next login.",
                               }),
                             ],
                           }),
@@ -623,6 +623,28 @@ export function SettingsPanel({
                               className:
                                 "text-[7px] text-slate-500 uppercase font-mono",
                               children: "Reconnects automatically to apply",
+                            }),
+                          ],
+                        }),
+                        b.jsxs("div", {
+                          className: "space-y-1",
+                          children: [
+                            b.jsx("label", {
+                              className:
+                                "block text-[8px] font-mono tracking-wider text-slate-300 uppercase",
+                              children: "Talk to me as",
+                            }),
+                            b.jsxs("select", {
+                              value: s.addressAs || "auto",
+                              onChange: (F) =>
+                                o({ addressAs: F.target.value }),
+                              className:
+                                "w-full px-1.5 py-1 rounded-lg border border-white/10 bg-white/5 text-[8px] text-white font-mono focus:outline-none focus:border-cyan-400/50 transition cursor-pointer",
+                              children: [
+                                b.jsx("option", { value: "auto", children: "Auto (from how I talk)" }),
+                                b.jsx("option", { value: "male", children: "A boy" }),
+                                b.jsx("option", { value: "female", children: "A girl" }),
+                              ],
                             }),
                           ],
                         }),

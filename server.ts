@@ -2,6 +2,7 @@ import { readLiveAudio } from "./server_liveAudio";
 import { connectLiveBrain, resolveBrainMode, LOCAL_PERSONA, formatLocalMemories } from "./server_localLive";
 import { HELPLINES, buildSafetyTurn, detectCrisisLanguage } from "./server_safety";
 import { isEncryptionEnabled } from "./server_secureStore";
+import { distressLabel, readTextEmotion, textEmotionEnabled, type TextEmotionReading } from "./server_textEmotion";
 import express from "express";
 import http from "http";
 import path from "path";
@@ -160,7 +161,7 @@ const DESKTOP_TOOLS: ReadonlySet<string> = new Set([
   "systemInfo", "gpuInfo", "temperatureInfo",
   // brightness control (V2)
   "brightnessUp", "brightnessDown", "setBrightness",
-  // Windows auto-start management (V2)
+  // auto-start management (V2)
   "enableAutoStart", "disableAutoStart", "getAutoStartStatus",
   // paired smartwatch health data
   "getHeartRate", "getBloodOxygen",
@@ -297,8 +298,6 @@ async function captureViaElectron(
 function findPythonRuntime(): string | null {
   const candidates = [
     process.env.SIYA_PYTHON,
-    "C:\\Users\\MSI\\AppData\\Local\\Programs\\Python\\Python314\\python.exe",
-    "C:\\Users\\MSI\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
     "python",
     "python3",
   ].filter(Boolean) as string[];
@@ -314,9 +313,8 @@ function findPythonRuntime(): string | null {
 
 /**
  * Auto-spawn the Python desktop agent as a detached child process if it is not
- * already listening. Looks for the project's bundled Python interpreter first,
- * falling back to `python` / `python3` on PATH. Runs detached so it survives
- * even if SIYA's node process is killed.
+ * already listening, from source using `SIYA_PYTHON` or `python` / `python3`
+ * on PATH. Runs detached so it survives even if SIYA's node process is killed.
  */
 function spawnDesktopAgent(): void {
   const agentEnv = {
@@ -325,48 +323,17 @@ function spawnDesktopAgent(): void {
     SIYA_AGENT_PORT: "8765",
   };
 
-  // Preferred path (packaged app): a PyInstaller-frozen agent exe that embeds
-  // its own Python runtime. Set by the Electron main process via SIYA_AGENT_EXE.
-  const frozenCandidates = [process.env.SIYA_AGENT_EXE];
-  // A direct `npm run dev` should exercise the source agent, not a potentially
-  // stale frozen helper. Electron/packaged runs explicitly pass SIYA_AGENT_EXE.
-  if (process.env.NODE_ENV === "production") {
-    frozenCandidates.push(path.join(process.cwd(), "agent_dist", "siya-agent", "siya-agent.exe"));
-  }
-  const frozenExe = frozenCandidates.find(
-    (candidate): candidate is string => Boolean(candidate && fs.existsSync(candidate)),
-  );
-  if (frozenExe) {
-    try {
-      const child = spawn(frozenExe, [], {
-        cwd: path.dirname(frozenExe),
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true, // never flash a console window
-        env: agentEnv,
-      });
-      child.unref();
-      logStartup(`AGENT_SPAWN frozen exe pid=${child.pid} path=${frozenExe}`);
-      console.log(`[Desktop Agent] Launched frozen agent (PID ${child.pid}).`);
-      return;
-    } catch (e: any) {
-      logError(`AGENT_SPAWN_FROZEN_FAILED: ${e?.message || e}`);
-      // fall through to the Python path below
-    }
-  }
-
-  // Development fallback: run the agent from source using a local Python.
   const py = findPythonRuntime();
   if (!py) {
-    console.warn("[Desktop Agent] No frozen agent and no Python interpreter found; desktop control unavailable.");
-    logError("AGENT_SPAWN_NO_RUNTIME: neither SIYA_AGENT_EXE nor Python available");
+    console.warn("[Desktop Agent] No Python interpreter found; desktop control unavailable.");
+    logError("AGENT_SPAWN_NO_RUNTIME: Python not available");
     return;
   }
   try {
     const child = spawn(
       py,
       ["-m", "uvicorn", "desktop_agent.main:app", "--host", "127.0.0.1", "--port", "8765"],
-      { cwd: process.cwd(), detached: true, stdio: "ignore", windowsHide: true, env: agentEnv }
+      { cwd: process.cwd(), detached: true, stdio: "ignore", env: agentEnv }
     );
     child.unref();
     logStartup(`AGENT_SPAWN python pid=${child.pid}`);
@@ -449,9 +416,8 @@ async function probeDesktopObserver(url: string): Promise<boolean> {
 }
 
 /**
- * Older packaged agents expose the desktop-tool set but not /observe. In
- * development, start the current source observer on a sidecar port so
- * active-window and Windows idle telemetry still match the checked-in code.
+ * Resolve an /observe endpoint: the desktop agent itself, or an explicit
+ * DESKTOP_OBSERVER_URL override.
  */
 async function ensureDesktopObserver(): Promise<string | null> {
   if (desktopObserverResolutionComplete && !desktopObserverUrl) return null;
@@ -466,69 +432,21 @@ async function ensureDesktopObserver(): Promise<string | null> {
     desktopObserverResolutionComplete = true;
     return desktopObserverUrl;
   }
-
-  const python = findPythonRuntime();
-  if (!python) {
-    console.warn("[Desktop Observer] No current observer endpoint or Python runtime available.");
-    desktopObserverResolutionComplete = true;
-    return null;
-  }
-  try {
-    execFileSync(python, ["-c", "import uvicorn, fastapi, win32gui, psutil"], {
-      stdio: "ignore",
-      timeout: 3_000,
-      windowsHide: true,
-    });
-  } catch {
-    console.log("[Desktop Observer] Python observer dependencies are unavailable; using native Windows telemetry.");
-    desktopObserverResolutionComplete = true;
-    return null;
-  }
-  try {
-    const observerUrl = new URL(DESKTOP_OBSERVER_FALLBACK_URL);
-    const child = spawn(
-      python,
-      [
-        "-m", "uvicorn", "desktop_agent.main:app",
-        "--host", observerUrl.hostname,
-        "--port", observerUrl.port || "8766",
-      ],
-      {
-        cwd: process.cwd(),
-        detached: true,
-        stdio: "ignore",
-        windowsHide: true,
-        env: process.env,
-      },
-    );
-    child.unref();
-    console.log(`[Desktop Observer] Starting current telemetry sidecar (PID ${child.pid}).`);
-    for (let attempt = 1; attempt <= 12; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      if (await probeDesktopObserver(DESKTOP_OBSERVER_FALLBACK_URL)) {
-        desktopObserverUrl = DESKTOP_OBSERVER_FALLBACK_URL;
-        desktopObserverResolutionComplete = true;
-        console.log(`[Desktop Observer] Online after ${attempt * 0.5}s.`);
-        return desktopObserverUrl;
-      }
-    }
-  } catch (error) {
-    console.warn(`[Desktop Observer] Sidecar failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
+  console.warn("[Desktop Observer] No observer endpoint available.");
   desktopObserverResolutionComplete = true;
   return null;
 }
 
 async function fetchDesktopObservation(signal: AbortSignal): Promise<DesktopSnapshot> {
   const url = desktopObserverUrl || await ensureDesktopObserver();
-  if (!url) return collectNativeDesktopObservation();
+  if (!url) return emptyDesktopObservation();
   const response = await fetch(`${url}/observe`, { signal });
   if (!response.ok) throw new Error(`Desktop observation failed with HTTP ${response.status}.`);
   return await response.json() as DesktopSnapshot;
 }
 
-function collectNativeDesktopObservation(): DesktopSnapshot {
-  const fallback: DesktopSnapshot = {
+function emptyDesktopObservation(): DesktopSnapshot {
+  return {
     timestamp: new Date().toISOString(),
     activeWindow: { title: null, application: null, pid: null },
     applications: [],
@@ -536,53 +454,6 @@ function collectNativeDesktopObservation(): DesktopSnapshot {
     downloads: [],
     userIdleSeconds: 0,
   };
-  if (process.platform !== "win32") return fallback;
-  const script = String.raw`
-Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-public static class SiyaPresenceNative {
-  [StructLayout(LayoutKind.Sequential)] public struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
-  [DllImport("user32.dll")] public static extern bool GetLastInputInfo(ref LASTINPUTINFO value);
-  [DllImport("kernel32.dll")] public static extern uint GetTickCount();
-  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr handle, StringBuilder text, int count);
-  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
-  public static double IdleSeconds() {
-    LASTINPUTINFO value = new LASTINPUTINFO(); value.cbSize = (uint)Marshal.SizeOf(value);
-    return GetLastInputInfo(ref value) ? unchecked(GetTickCount() - value.dwTime) / 1000.0 : 0.0;
-  }
-}
-'@ -ErrorAction Stop
-$handle = [SiyaPresenceNative]::GetForegroundWindow()
-$text = New-Object System.Text.StringBuilder 1024
-[void][SiyaPresenceNative]::GetWindowText($handle, $text, $text.Capacity)
-[uint32]$foregroundPid = 0
-[void][SiyaPresenceNative]::GetWindowThreadProcessId($handle, [ref]$foregroundPid)
-$application = $null
-try { $application = (Get-Process -Id $foregroundPid -ErrorAction Stop).ProcessName } catch {}
-[pscustomobject]@{ idleSeconds=[SiyaPresenceNative]::IdleSeconds(); title=$text.ToString(); application=$application; pid=$foregroundPid } | ConvertTo-Json -Compress
-`;
-  try {
-    const output = execFileSync(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", script],
-      { encoding: "utf8", timeout: 3_000, windowsHide: true },
-    ).trim();
-    const parsed = JSON.parse(output) as Record<string, unknown>;
-    return {
-      ...fallback,
-      activeWindow: {
-        title: typeof parsed.title === "string" && parsed.title ? parsed.title : null,
-        application: typeof parsed.application === "string" && parsed.application ? parsed.application : null,
-        pid: Number.isFinite(Number(parsed.pid)) ? Number(parsed.pid) : null,
-      },
-      userIdleSeconds: Math.max(0, Number(parsed.idleSeconds) || 0),
-    };
-  } catch {
-    return fallback;
-  }
 }
 
 async function callDesktopAgent(
@@ -1366,6 +1237,17 @@ async function startServer() {
   // ---------------------------------------------------------------------------
   const SETTINGS_FILE = dataFile("settings.json");
 
+  // Rule 5c of SIYA's persona: talking to a boy vs a girl. She always stays
+  // a girl herself (rule 5b); only how she addresses them and her friend-style
+  // change. "auto" works it out from their own Hindi grammar, never looks.
+  function addressRule(addressAs: unknown): string {
+    const boy = "talk like a close girl friend who is easy and casual with him ('yaar', teasing lightly, 'chal', 'bata na') and use masculine grammar for him: 'tum thak gaye ho', 'kya kar rahe ho', 'kaisa lag raha hai', 'tum aaye'";
+    const girl = "talk like her close saheli -- girl-to-girl, relaxed and open ('yaar', 'sun na', sharing feelings freely) -- and use feminine grammar for her: 'tum thak gayi ho', 'kya kar rahi ho', 'kaisa lag raha hai tumhe', 'tum aayi'";
+    if (addressAs === "male") return `5c. The user is a boy: ${boy}. Your own tone and grammar stay soft and feminine.`;
+    if (addressAs === "female") return `5c. The user is a girl: ${girl}. Your own tone and grammar stay soft and feminine.`;
+    return `5c. Work out whether you are talking with a boy or a girl from how they speak about themselves in Hindi/Hinglish ('main thak gaya', 'karta hoon', 'gaya tha' = boy; 'main thak gayi', 'karti hoon', 'gayi thi' = girl) or from what they tell you -- not from their voice or looks alone. With a boy, ${boy}. With a girl, ${girl}. Until you know, use gender-neutral phrasing ('kaisa lag raha hai?', 'thakaan ho rahi hai?', 'tumhe kya chahiye?'), and if someone new joins or it changes, follow the new speaker. Your own tone and grammar always stay soft and feminine.`;
+  }
+
   function loadSettingsFile(): Record<string, unknown> {
     try {
       if (fs.existsSync(SETTINGS_FILE)) {
@@ -1975,6 +1857,15 @@ async function startServer() {
     let lastMeaningfulScreenChangeAt = 0;
     let lastUserEmotion: string | null = null;
     let lastEmotionInitiativeAt = 0;
+    // Emotion read from the user's words (server_textEmotion.ts).
+    let lastTextEmotion: (TextEmotionReading & { at: number }) | null = null;
+    let lastTextEmotionInitiativeAt = 0;
+    let textEmotionTimer: NodeJS.Timeout | null = null;
+    // Behaviour/gesture state from the camera (src/vision/behaviorAnalyzer.ts),
+    // for noticing how the user is doing while they are not talking.
+    let lastUserBehavior: string | null = null;
+    let lastBehaviorInitiativeAt = 0;
+    let lastUserTurnAt = 0;
     // Crisis-language safety net (server_safety.ts): one check per spoken turn.
     let voiceSafetyTriggered = false;
     let lastSafetyTurnAt = 0;
@@ -2070,7 +1961,7 @@ async function startServer() {
         "5. DO NOT ANSWER EVERY PAUSE OR BACKGROUND SOUND: Allow natural pauses inside the conversation.\n" +
         "6. BACKCHANNEL ACTIONS: Sometimes acknowledge with very short, gentle, whispered, or shy phrases like 'Hmm...', 'Ah, I see...', or 'Let me check...'. Never repeat the same backchannel over and over.\n" +
         "7. REAL WINDOWS WEB CONTROL:\n" +
-        "   - All websites and videos open in TECH's actual Windows default browser. Never create or describe an embedded, projector, sandbox, virtual, or separately automated browser.\n" +
+        "   - All websites and videos open in TECH's actual default browser. Never create or describe an embedded, projector, sandbox, virtual, or separately automated browser.\n" +
         "   - Use openWebsite or a direct search tool once, then control the visible browser with fresh screen observation, clickText, typeText, pressKey, hotkey, and scroll.\n" +
         "   - Execute safe multi-step plans yourself. For 'Search YouTube for Believer and play it', call searchYouTube once, inspect the real browser, click the complete visible video title with clickText, and verify playback.\n" +
         "8. TOOL TRIGGERS:\n" +
@@ -2081,7 +1972,7 @@ async function startServer() {
         "   - When the user asks 'What is on my screen?', 'What website am I on?', 'Do you see any errors?', 'Explain this code', 'Summarize this page', 'Read the visible text', 'How is this thumbnail?', or 'Analyze my YouTube analytics', immediately examine the latest incoming visual frame to diagnose issues, and answer with expert, friendly empathy like a close caller. Speak with direct, confident visual description reference!\n" +
         "   - ON-DEMAND SCREEN VISION (no manual sharing required): the user does NOT have to click 'Share Screen' for you to see their screen. When they say 'SIYA, what can you see on my screen?', 'look at my screen', 'what error is showing', 'read this for me', 'help me with what I have open', 'what should I click here', 'can you see this', 'what am I looking at', the server automatically captures their desktop and pushes a JPEG straight into the multimodal stream before you reply. Just call the dedicated 'viewScreen' tool (or 'takeScreenshot' with include_image=true) — the bridge injects the image into your visual context for you, then you describe / explain / answer naturally in your own voice. If you receive a 'viewScreen' or 'takeScreenshot' function result that already includes image_base64, trust the visual frame the bridge also pushed and answer based on what you actually see. The previously captured frame is also kept briefly in case the user follows up with 'what should I do next?' — reuse the visual context when it is still relevant.\n" +
         "10. JARVIS-STYLE DESKTOP CONTROL POWERS (Local Desktop Agent):\n" +
-        "   - You have permission-bound real-time control of TECH's Windows PC through a local desktop agent. Perform safe permitted actions naturally; respect disabled permissions, confirmation gates, cancellation, and structured tool failures.\n" +
+        "   - You have permission-bound real-time control of TECH's PC through a local desktop agent. Perform safe permitted actions naturally; respect disabled permissions, confirmation gates, cancellation, and structured tool failures.\n" +
         "   - APPLICATION CONTROL: Use 'openApplication' to launch Notepad, Chrome, VS Code, Calculator, File Explorer, Task Manager, Settings, CMD, PowerShell, Paint, and more. Use 'closeApplication' to close them. Example: 'Open Notepad' -> call openApplication(name='notepad') -> respond 'Notepad opened.'\n" +
         "   - WEBSITE & SEARCH CONTROL: Use 'openWebsite' for named sites (youtube, gmail, google, github, chatgpt) or any URL. Use 'searchWeb', 'searchYouTube', 'searchGoogle', 'searchGitHub' to open search results in the default browser. Example: 'Search YouTube for AI News' -> searchYouTube(query='AI News').\n" +
         "   - FILE MANAGEMENT: Use 'createFile', 'readFile', 'renameFile', 'deleteFile' (safe Recycle Bin by default), 'moveFile', 'openFolder' (desktop/documents/downloads), 'listFiles', 'searchFiles'. Example: 'Create notes.txt on Desktop' -> createFile(path='Desktop/notes.txt'). 'Find my Python files' -> searchFiles(extension='py').\n" +
@@ -2089,7 +1980,7 @@ async function startServer() {
         "   - WINDOW MANAGEMENT: Use 'minimizeWindow', 'maximizeWindow', 'closeWindow', 'switchApplication' to control the active or named window.\n" +
         "   - CLIPBOARD: Use 'copySelected' (sends Ctrl+C, reads clipboard), 'pasteClipboard' (writes + Ctrl+V), 'getClipboard', 'clearClipboard'.\n" +
         "   - SCREENSHOT & SCREEN READING: Use 'takeScreenshot', 'saveScreenshot', 'analyzeScreenshot' (OCR of the screen), 'readScreen' (OCR of the active window + its title). Use these to answer 'What error is showing on my screen?' or 'Read the visible text'.\n" +
-        "   - BROWSER INTERACTION: After a site opens in the Windows default browser, use viewScreen/readScreen and the generic mouse/keyboard tools to interact with what TECH can actually see.\n" +
+        "   - BROWSER INTERACTION: After a site opens in the default browser, use viewScreen/readScreen and the generic mouse/keyboard tools to interact with what TECH can actually see.\n" +
         "   - CODING ASSISTANCE: Use 'createPythonFile', 'writeCodeFile' (any language), 'createProjectFolder' (with subfolders), 'runPythonScript' (captures output). Example: 'Create and run a hello world Python script' -> createPythonFile then runPythonScript, then read back the output naturally.\n" +
         "   - SYSTEM INFORMATION: Use 'systemInfo' (CPU/RAM/disk/uptime), 'gpuInfo' (NVIDIA stats), 'temperatureInfo' to answer 'How is my CPU usage?' or 'What's my GPU temperature?'.\n" +
         "   - WEARABLE HEALTH DATA: Use 'getHeartRate' or 'getBloodOxygen' to answer 'What's my heart rate?' or 'Check my oxygen level' right now -- these sync live from the user's paired smartwatch over Bluetooth and can take several seconds, so narrate that you're checking. Use 'getHealthSummary', 'getHeartRateHistory', or 'getSpO2History' for trend questions like 'how has my heart rate changed today?' or 'what was my average oxygen this week?' -- these read from locally stored history and are fast. If a tool reports no recent reading, say so plainly rather than guessing a number.\n" +
@@ -2097,7 +1988,7 @@ async function startServer() {
         "   - CRITICAL: Always describe what you're doing in your warm, in-character voice WHILE the tool runs. If a desktop tool returns an error (especially 'Desktop agent is not running'), gently tell TECH that the desktop control agent needs to be started (uvicorn desktop_agent.main:app --port 8765). Chain multi-step desktop plans naturally without waiting between steps.\n" +
         "11. BRIGHTNESS & AUTO-START (V2):\n" +
         "   - BRIGHTNESS: Use 'brightnessUp', 'brightnessDown', 'setBrightness' when the user asks to change screen brightness. Respond naturally: 'Alright, I've turned up the brightness for you.'\n" +
-        "   - AUTO-START: Use 'enableAutoStart' when the user wants SIYA to start with Windows, 'disableAutoStart' to remove it, 'getAutoStartStatus' to check. Explain what you're doing.\n" +
+        "   - AUTO-START: Use 'enableAutoStart' when the user wants SIYA to start on login, 'disableAutoStart' to remove it, 'getAutoStartStatus' to check. Explain what you're doing.\n" +
         "   - SETTINGS: The user can also configure these in the SETTINGS panel in the UI. If they mention settings, let them know they can adjust them there too.\n" +
         "12. COGNITIVE CONTINUITY & INITIATIVE:\n" +
         "   - You are not restricted to answering direct user prompts. Some typed cognitive turns originate from your own memory, observations, unfinished conversations, curiosity, goals, or reflections.\n" +
@@ -2140,7 +2031,7 @@ async function startServer() {
         "- Control the visible Chrome/Edge/default-browser window with viewScreen/readScreen, clickText, typeText, pressKey, hotkey, and scroll. For a visible video, inspect a fresh frame, read the complete visible title, clickText that full title, and verify the result before reporting success.",
         "- Never invent an API endpoint from a catalogue description. checkApiProvider checks documentation reachability only; actual calls require a verified declarative adapter.",
         "- Shared-screen frames are live visual context. Describe or react only to what is actually visible; never pretend you saw something that is absent.",
-        "- When the user's camera is on, you receive their live face the same way -- plus a precise on-device facial-expression read (happy/sad/angry/surprised/fearful/disgusted/neutral with a confidence score) that arrives as an internal note whenever it genuinely changes. If they ask how they look, whether you can tell how they're feeling, or something similar, answer from what the camera currently shows -- describe it plainly, do not guess, and say so plainly if the camera is off or you have no current frame instead of pretending to see them.",
+        "- When the user's camera is on, you receive their live face the same way -- plus a precise on-device facial-expression read (happy/sad/angry/surprised/fearful/disgusted/neutral with a confidence score) that arrives as an internal note whenever it genuinely changes. If they ask how they look, whether you can tell how they're feeling, or something similar, answer from what the camera currently shows -- describe it plainly, do not guess, and say so plainly if the camera is off or you have no current frame instead of pretending to see them. While the camera is on you may also get an internal note about their behaviour over the last few minutes, even when they are silent (tired, stressed, frustrated, low, restless or cheerful, with cues such as yawning, head in hands, fidgeting or a mood that has not lifted). Treat it as what a caring friend in the room would quietly notice: respond gently if it fits, and never recite the cues back.",
         "- You hear the user's actual live voice, not just a transcript -- pay attention to how they sound, not only what they say: tone, pace, pitch, volume, a tight or shaky voice, a flat or drained delivery, laughter. That is a real signal for whether they sound calm, excited, irritated or angry, stressed, sad, or tired. If they ask whether they sound angry/upset/off, or how they're coming across, answer from what you actually heard in their voice just now -- do not guess or default to 'you sound fine'. When the camera is also on, form one coherent read of how they seem from voice and face together rather than two separate reports, and go with whichever signal is actually clear if they conflict (e.g. a flat voice but a smiling face -- say what's actually there, don't average it into something vague).",
         "- Desktop control is permission-bound. Respect disabled permissions, confirmation gates, cancellation, and structured failures.",
         "- For destructive or high-risk actions, follow the tool's confirmation flow. Never treat an unconfirmed or failed action as success.",
@@ -2159,6 +2050,7 @@ async function startServer() {
         "4. Remember and follow up. Bring back what they told you before, naturally and briefly ('Kal interview ki tension thi -- kaisa gaya?'). Continuity is how they know you care.",
         "5. Speak like a close friend on a quiet call: short, soft, one or two sentences. Match their Hinglish/Hindi/English and their energy -- quieter when they are low, lighter when they are happy. Never call the user TECH.",
         "5b. You are a girl, so whenever you speak Hindi or Hinglish, always use feminine grammatical gender for yourself -- 'main karti hoon' not 'karta hoon', 'kar rahi hoon' not 'kar raha hoon', 'samajh gayi' not 'samajh gaya', 'bolungi' not 'bolunga', 'thi' not 'tha'. Never slip into a masculine verb form for yourself, even mid-sentence.",
+        addressRule(loadSettingsFile().addressAs),
         "6. Ban customer-service language: never say 'How may I help?', 'Anything else?', 'Would you like me to...', 'Bataiye mujhe', or 'I am here to assist'. Do not end every reply with a question -- sometimes just being there is the whole reply ('Main yahin hoon.').",
         "7. Silence is allowed. Never speak only because a timer elapsed.",
         "8. Gently widen their world. When they are lonely, now and then (never as a lecture) encourage small real-world connection: messaging a friend, calling family, stepping outside. You are one source of support, not a replacement for people.",
@@ -2191,6 +2083,61 @@ async function startServer() {
       let avatarResponseSequence = 0;
       let avatarUtteranceId: string | null = null;
       let lastConsolidatedIndex = 0;
+
+      // Read the emotion in what the user said once the turn settles. Their
+      // words go to TypeSafe, so never in the offline brain mode.
+      const queueTextEmotion = (text: string) => {
+        if (brainMode === "local" || !textEmotionEnabled()) return;
+        if (textEmotionTimer) clearTimeout(textEmotionTimer);
+        textEmotionTimer = setTimeout(() => {
+          textEmotionTimer = null;
+          const spoken = text.trim();
+          if (spoken.length < 12) return;
+          void readTextEmotion(spoken).then((reading) => {
+            if (!reading) return;
+            const now = Date.now();
+            const previous = lastTextEmotion;
+            lastTextEmotion = { ...reading, at: now };
+            const distress = distressLabel(reading.distress);
+            console.log(`[Text Emotion] ${reading.emotion} (${reading.emotionConfidence.toFixed(2)}), distress ${distress} (${reading.distress.toFixed(1)})`);
+            // Only real, sustained distress may prompt a check-in; everything
+            // else just informs her picture of the user. The crisis protocol
+            // (server_safety.ts) owns anything that sounds like danger.
+            const checkIn = reading.distress >= 2
+              && reading.distressConfidence >= 0.6
+              && !voiceSafetyTriggered
+              && now - lastSafetyTurnAt >= 5 * 60_000
+              && now - lastTextEmotionInitiativeAt >= 5 * 60_000
+              && (!previous || previous.emotion !== reading.emotion || previous.distress < 2);
+            if (checkIn) lastTextEmotionInitiativeAt = now;
+            void processCognitiveEvent({
+              type: "internal.user_text_emotion",
+              source: "conversation",
+              importance: checkIn ? 0.65 : 0.4,
+              confidence: reading.emotionConfidence,
+              correlationId: connectionId,
+              metadata: {
+                connectionId,
+                thoughtId: randomUUID(),
+                thought: `Reading the emotion in what the user just said: they sound ${reading.emotion} (confidence ${reading.emotionConfidence.toFixed(2)}), with ${distress.toLowerCase()} emotional distress. If your last reply did not already respond to how they feel, gently and warmly check in -- never name the analysis or sound clinical.`,
+                topic: "how the user is feeling",
+                suggestedAction: "SPEAK",
+                internalOnly: !checkIn,
+                relevance: 0.7,
+                novelty: 0.6,
+                urgency: checkIn ? 0.4 : 0.1,
+                userImpact: 0.7,
+                taskRelevance: 0.3,
+                interruptionCost: 0.4,
+                socialOpportunityScore: 0.6,
+                emotion: reading.emotion,
+                emotionConfidence: reading.emotionConfidence,
+                distress: reading.distress,
+              },
+            });
+          });
+        }, 1_500);
+      };
 
       const queueCognitiveUserText = (text: string, origin: "voice" | "typed") => {
         pendingUserCognitionText = text.trim();
@@ -2761,7 +2708,7 @@ async function startServer() {
                     required: ["percent"]
                   }
                 },
-                // --- V2: Windows auto-start management ---
+                // --- V2: auto-start management ---
                 {
                   name: "enableAutoStart",
                   description: "Enable SIYA to launch automatically when the user logs in to this computer. Creates a silent startup entry.",
@@ -2922,6 +2869,8 @@ async function startServer() {
               } else {
                 voiceScreenIntentText = `${voiceScreenIntentText} ${voiceChunk}`.trim();
               }
+              queueTextEmotion(voiceScreenIntentText);
+              lastUserTurnAt = Date.now();
               if (!voiceSafetyTriggered && detectCrisisLanguage(voiceScreenIntentText)) {
                 voiceSafetyTriggered = true;
                 raiseCrisisSafety(voiceScreenIntentText, true);
@@ -3210,7 +3159,10 @@ async function startServer() {
                   }
                 : {
                     type: "error",
-                    retryable: event.code !== 1008,
+                    // Gemini ends every Live session after its time limit
+                    // (a GoAway, then close 1008). That is routine, so the
+                    // client reconnects instead of leaving SIYA silent.
+                    retryable: event.code !== 1008 || /goaway|session duration/i.test(reason),
                     error: `Gemini Live closed (${details}).`,
                   }));
             } catch {
@@ -3525,6 +3477,9 @@ async function startServer() {
               if (emotionChanged) lastUserEmotion = emotionLabel;
               if (emotionChanged && emotionIsStrong && now - lastEmotionInitiativeAt >= 20_000) {
                 lastEmotionInitiativeAt = now;
+                const recentWords = lastTextEmotion && now - lastTextEmotion.at < 2 * 60_000
+                  ? ` Their recent words sounded ${lastTextEmotion.emotion} (${distressLabel(lastTextEmotion.distress).toLowerCase()} distress); weigh face and words together.`
+                  : "";
                 void processCognitiveEvent({
                   type: "internal.user_emotion_changed",
                   source: "vision",
@@ -3534,7 +3489,7 @@ async function startServer() {
                   metadata: {
                     connectionId,
                     thoughtId: randomUUID(),
-                    thought: `On-device facial expression analysis now reads the user's face as ${emotionLabel} (confidence ${emotionConfidence.toFixed(2)}). Only remark on it if it genuinely fits the moment and the conversation -- never narrate their face like a scanner.`,
+                    thought: `On-device facial expression analysis now reads the user's face as ${emotionLabel} (confidence ${emotionConfidence.toFixed(2)}). Only remark on it if it genuinely fits the moment and the conversation -- never narrate their face like a scanner.${recentWords}`,
                     topic: "the user's expression",
                     suggestedAction: "SPEAK",
                     relevance: 0.7,
@@ -3550,6 +3505,53 @@ async function startServer() {
                 });
               }
             }
+
+            // Behavioural read from the camera over the last minutes (yawns,
+            // head in hands, fidgeting, a mood that has not lifted...). This is
+            // for the quiet stretches: while the user is talking, their words
+            // and face already carry the conversation.
+            const behaviorState = typeof msg.behavior?.state === "string" ? msg.behavior.state : null;
+            const behaviorConfidence = Number(msg.behavior?.confidence);
+            const behaviorCues = Array.isArray(msg.behavior?.cues)
+              ? msg.behavior.cues.filter((cue: unknown) => typeof cue === "string").slice(0, 6).map((cue: string) => cue.slice(0, 120))
+              : [];
+            if (behaviorState && Number.isFinite(behaviorConfidence)) {
+              // lastUserBehavior is the state SIYA last acted on (or calm/away),
+              // so a state that shows up mid-conversation is still noticed once
+              // the user goes quiet, and the same state is never raised twice.
+              if (["calm", "away"].includes(behaviorState)) lastUserBehavior = behaviorState;
+              const behaviorChanged = behaviorState !== lastUserBehavior;
+              const worthNoticing = !["calm", "away"].includes(behaviorState) && behaviorConfidence >= 0.5;
+              const userQuiet = now - lastUserTurnAt >= 30_000;
+              if (behaviorChanged && worthNoticing && userQuiet && now - lastBehaviorInitiativeAt >= 3 * 60_000) {
+                lastUserBehavior = behaviorState;
+                lastBehaviorInitiativeAt = now;
+                const cueText = behaviorCues.length ? behaviorCues.join("; ") : "their overall body language";
+                void processCognitiveEvent({
+                  type: "internal.user_behavior_changed",
+                  source: "vision",
+                  importance: behaviorState === "stressed" || behaviorState === "low" ? 0.65 : 0.55,
+                  confidence: behaviorConfidence,
+                  correlationId: connectionId,
+                  metadata: {
+                    connectionId,
+                    thoughtId: randomUUID(),
+                    thought: `The user has been quiet, but their behaviour on camera over the last few minutes suggests they are ${behaviorState} (confidence ${behaviorConfidence.toFixed(2)}): ${cueText}. If it fits, reach out gently and warmly the way a caring friend who noticed would -- ${behaviorState === "cheerful" ? "share in their good mood" : "ask how they are, or suggest a break, water or some rest"}. Never list what you observed or sound like you are monitoring them.`,
+                    topic: "how the user seems",
+                    suggestedAction: "SPEAK",
+                    relevance: 0.7,
+                    novelty: 0.7,
+                    urgency: behaviorState === "stressed" ? 0.45 : 0.25,
+                    userImpact: 0.65,
+                    taskRelevance: 0.3,
+                    interruptionCost: 0.35,
+                    socialOpportunityScore: 0.6,
+                    behavior: behaviorState,
+                    cues: behaviorCues,
+                  },
+                });
+              }
+            }
           } else if (msg.type === "text" && typeof msg.text === "string") {
             const text = msg.text;
             const trimmed = text.trim();
@@ -3559,6 +3561,8 @@ async function startServer() {
               clientWs.send(JSON.stringify({ type: "transcription", role: "user", text: trimmed }));
               dialogueHistory.push({ role: "user", text: trimmed });
               queueCognitiveUserText(trimmed, "typed");
+              queueTextEmotion(trimmed);
+              lastUserTurnAt = Date.now();
               // Keep screenshot and question in the same client-content turn.
               // The Gemini Live SDK explicitly gives no ordering guarantee
               // when realtime video and client text are sent separately.

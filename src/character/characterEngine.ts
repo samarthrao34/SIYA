@@ -1568,7 +1568,7 @@ export class a2 {
       (this.renderer.outputColorSpace = Qg),
       (this.renderer.toneMapping = i2[s.toneMapping] ?? Wg),
       (this.renderer.toneMappingExposure = s.exposure),
-      (this.renderer.shadowMap.enabled = !0),
+      (this.renderer.shadowMap.enabled = s.shadows !== !1),
       (this.renderer.shadowMap.type = Mx),
       (this.camera = new Ex(o.fov, 1, 0.1, 500)),
       this.camera.position.set(0, 0, o.distance),
@@ -2525,6 +2525,14 @@ export class m2 {
       (this.emotionTime = 0),
       (this.emotionOffset = new THREE.Vector3()),
       (this.blinkRequested = !1),
+      // Ambient look-around (opt-in via CharacterEngine.setLookAround).
+      (this.ambient = !1),
+      (this.talking = !1),
+      (this.glanceOffset = new THREE.Vector3()),
+      (this.glanceTarget = new THREE.Vector3()),
+      (this.glanceTimer = 0),
+      (this.glanceNext = 1.5),
+      (this.glanceAway = !1),
       (this._headWorld = new THREE.Vector3()),
       (this._targetLocal = new THREE.Vector3()),
       (this._dir = new THREE.Vector3()),
@@ -2559,6 +2567,42 @@ export class m2 {
   scheduleWander() {
     ((this.wanderTimer = 0), (this.wanderNext = THREE.MathUtils.randFloat(2.5, 6.5)));
   }
+  // Natural look-around: eye contact most of the time, broken by glances to
+  // the side, up (thinking), or briefly down, each followed by a return to
+  // the user. Angles are converted at the current head-to-camera distance,
+  // so the look is the same in a close-up or a full-body shot. Large shifts
+  // come with a blink, and while talking she glances away less and briefer.
+  updateGlance(dt, cameraPos) {
+    if (((this.glanceTimer += dt), this.glanceTimer >= this.glanceNext)) {
+      this.glanceTimer = 0;
+      const D = Math.max(4, this._headWorld.distanceTo(cameraPos)),
+        rnd = THREE.MathUtils.randFloat,
+        side = Math.random() < 0.5 ? -1 : 1;
+      let yaw = rnd(-1.5, 1.5),
+        pitch = rnd(-1, 1),
+        hold;
+      if (this.glanceAway || Math.random() < (this.talking ? 0.7 : 0.4)) {
+        ((this.glanceAway = !1), (hold = this.talking ? rnd(2.5, 5) : rnd(1.8, 4.5)));
+      } else {
+        this.glanceAway = !0;
+        const p = Math.random();
+        p < 0.4
+          ? ((yaw = side * rnd(8, 14)), (pitch = rnd(-4, 4)), (hold = rnd(0.8, 2)))
+          : p < 0.6
+            ? ((yaw = side * rnd(18, 28)), (pitch = rnd(-4, 4)), (hold = rnd(1, 2.5)))
+            : p < 0.8
+              ? ((yaw = side * rnd(8, 16)), (pitch = rnd(10, 16)), (hold = rnd(1, 2.2)))
+              : ((yaw = side * rnd(0, 10)), (pitch = -rnd(8, 14)), (hold = rnd(0.7, 1.5)));
+        this.talking && (hold *= 0.6);
+      }
+      const r = THREE.MathUtils.degToRad;
+      (this.glanceTarget.set(Math.tan(r(yaw)) * D, Math.tan(r(pitch)) * D, 0),
+        this.glanceTarget.distanceTo(this.glanceOffset) > Math.tan(r(10)) * D && (this.blinkRequested = !0),
+        (this.glanceNext = hold));
+    }
+    // Eyes jump fast; the head follows slower through the head lerp below.
+    this.glanceOffset.lerp(this.glanceTarget, 1 - Math.exp(-12 * dt));
+  }
   update(i, s, o) {
     if (
       ((this.time += i),
@@ -2580,12 +2624,13 @@ export class m2 {
     const r =
       this.model.bones[this.model.boneIndexByName.get(this.bones.head) ?? -1];
     if (!r) return;
-    switch ((r.getWorldPosition(this._headWorld), this.mode)) {
+    const ambient = this.ambient && (this.mode === "user" || this.mode === "wander");
+    switch ((r.getWorldPosition(this._headWorld), ambient && this.updateGlance(i, o), this.mode)) {
       case "user":
-        this.target.copy(o);
+        (this.target.copy(o), ambient && this.target.add(this.glanceOffset));
         break;
       case "wander":
-        this.target.copy(o).add(this.wanderOffset);
+        this.target.copy(o).add(ambient ? this.glanceOffset : this.wanderOffset);
         break;
       case "away":
         (this.target.copy(o).add(this.wanderOffset),
@@ -3719,6 +3764,11 @@ class KimodoMotionSource {
 }
 
 export const w2 = 1 / 20;
+// Face framing (setFaceFocus): distance in MMD units, and the lift from the
+// head bone (base of the skull) to the middle of the face.
+const FACE_FOCUS_DISTANCE = 16;
+const FACE_FOCUS_OFFSET = 1.2;
+
 export class CharacterEngine {
   constructor(i) {
     ((this.model = null),
@@ -3946,15 +3996,30 @@ export class CharacterEngine {
       this.rafHandle && cancelAnimationFrame(this.rafHandle),
       (this.rafHandle = 0));
   }
+  // Opt-in face framing (the tablet app turns it on in landscape): aim the
+  // camera at the head and move in to a bust shot, so her face sits in the
+  // middle of a wide screen instead of a small full-body figure. Desktop
+  // never enables it, so its framing is unchanged.
+  // Opt-in (the tablet app): natural autonomous look-around, see updateGlance.
+  setLookAround(on) {
+    this.lookAround = !!on;
+  }
+  setFaceFocus(on) {
+    on = !!on;
+    if (this.faceFocus === on) return;
+    this.faceFocus = on;
+    this.stage.targetDistance = on ? FACE_FOCUS_DISTANCE : this.config.camera.distance;
+  }
   updateFocus() {
     const i = this.model;
     if (!i) return;
-    const s = i.boneIndexByName.get(this.config.camera.targetBone),
+    const bone = this.faceFocus ? "頭" : this.config.camera.targetBone,
+      s = i.boneIndexByName.get(bone),
       o = s !== void 0 ? i.bones[s] : void 0;
     (o
       ? o.getWorldPosition(this.focusPoint)
       : i.mesh.getWorldPosition(this.focusPoint),
-      (this.focusPoint.y += this.config.camera.targetOffset),
+      (this.focusPoint.y += this.faceFocus && o ? FACE_FOCUS_OFFSET : this.config.camera.targetOffset),
       this.stage.setFocus(this.focusPoint));
   }
   update(i) {
@@ -4031,7 +4096,10 @@ export class CharacterEngine {
               : "user");
       g.setMode(tt);
     }
-    (g.update(i, o, this.stage.camera.position), o.apply());
+    ((g.ambient = this.lookAround),
+      (g.talking = this.currentActivity === "talking"),
+      g.update(i, o, this.stage.camera.position),
+      o.apply());
     const _ =
         T.emotion === "idle" && this.currentActivity === "listening"
           ? "listening"

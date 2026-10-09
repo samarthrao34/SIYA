@@ -17,6 +17,8 @@ export const DEFAULT_SETTINGS = {
     micDeviceId: "",
     camDeviceId: "",
     voiceName: "Leda",
+    // How SIYA addresses the user in Hindi: "auto" (from how they talk), "male" or "female".
+    addressAs: "auto",
     sensitivity: 60,
     animations: !0,
     characterShine: 50,
