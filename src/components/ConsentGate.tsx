@@ -66,7 +66,7 @@ export function ConsentGate({ children }: { children: ReactNode }) {
   if (status === "ok") return <>{children}</>;
 
   return (
-    <div className="fixed inset-0 z-[110] flex justify-center overflow-y-auto bg-[#050509] px-4 py-8 text-white">
+    <div className="fixed inset-0 z-[110] flex justify-center overflow-y-auto overflow-x-hidden bg-[#050509] px-4 py-8 text-white">
       <div className="pointer-events-none absolute -left-40 -top-40 h-[420px] w-[420px] rounded-full bg-indigo-700/20 blur-[130px]" />
       <div className="pointer-events-none absolute -bottom-40 -right-40 h-[480px] w-[480px] rounded-full bg-cyan-700/15 blur-[150px]" />
       {status === "checking" ? (
