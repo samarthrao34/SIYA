@@ -37,7 +37,7 @@ speech) can replace Gemini entirely.
 | Area | What it does |
 | --- | --- |
 | **Live conversation** | Full-duplex voice and text over Gemini Live, with interruption, reconnect with backoff, wake word, and time-of-day greetings. |
-| **3D avatar** | VRM/PMX character rendered with Three.js: lip-sync from the audio stream, gaze, idle behaviour, procedural gestures, expressions and physics. |
+| **3D avatar** | SIYA's own VRoid (VRM) model, rendered with Three.js: lip-sync from the audio stream, gaze, idle behaviour, procedural gestures, expressions and physics. |
 | **Emotion & behaviour sensing** | MediaPipe face and hand landmarks, run locally in WASM, read facial emotion plus longer-term cues such as yawning, fatigue, head-in-hands and fidgeting. Optional text-emotion reading of the user's words. |
 | **Memory** | Long-term memories consolidated from conversations, browsable and editable in the Memories panel. |
 | **Cognition** | An autonomous layer for attention, goals, planning, curiosity, social initiative, proactive check-ins, and a critic that reviews tool use. |
@@ -78,7 +78,7 @@ deeper walkthrough.
 SIYA/
 ├── src/                    Desktop UI (React 19 + Vite + Tailwind 4)
 │   ├── api/                Live session client (audio in/out, reconnect, tool events)
-│   ├── character/          Three.js character engine, VRM/PMX loaders, stage
+│   ├── character/          Three.js character engine, VRM loader, SIYA's preset
 │   ├── components/         Main experience and panels (Settings, Memories, Health, Privacy…)
 │   ├── settings/           Settings store and wake-word listener
 │   └── vision/             On-device emotion and behaviour analysis (MediaPipe)

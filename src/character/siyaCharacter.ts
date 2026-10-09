@@ -2,24 +2,24 @@
  * SIYA's own avatar: an original VRoid character by Samarth (VRM 0.x),
  * loaded through vrmModelSource.ts. Everything not listed here (bone map,
  * idle/gaze/behaviour/lip-sync tuning, lighting, camera) is inherited from
- * Evelyn's tuned config, which works because the VRM loader presents the
- * VRoid skeleton under the same MMD bone names.
+ * the shared BASE_CHARACTER rig tuning, which works because the VRM loader
+ * presents the VRoid skeleton under MMD bone names.
  */
-import { EVELYN_CHARACTER } from "./characterEngine";
+import { BASE_CHARACTER } from "./characterEngine";
 
-const evelyn = EVELYN_CHARACTER as any;
+const base = BASE_CHARACTER as any;
 
 export const SIYA_CHARACTER = {
-  ...evelyn,
+  ...base,
   id: "siya",
   displayName: "SIYA",
   format: "vrm",
   modelUrl: "/assets/characters/siya/SIYA.vrm",
   textureMapUrl: null,
-  // VRoid rests in a T-pose; Evelyn rests 39.3 deg lower (0.686 rad), so the
-  // arm offsets add that on top of Evelyn's own base pose.
+  // VRoid rests in a T-pose; the base rig rests 39.3 deg lower (0.686 rad), so
+  // the arm offsets add that on top of the base pose.
   basePose: {
-    ...evelyn.basePose,
+    ...base.basePose,
     armL: { z: -1.27, y: 0.1 },
     armR: { z: 1.27, y: -0.1 },
   },
@@ -59,21 +59,21 @@ export const SIYA_CHARACTER = {
     cloth: ["cloth"],
   },
   materialTuning: {
-    ...evelyn.materialTuning,
-    // Evelyn's skin tuning adds warmth for her palette; SIYA's VRoid skin
+    ...base.materialTuning,
+    // The base skin tuning adds warmth for her palette; SIYA's VRoid skin
     // texture is already warm, so keep it closer to what VRoid shows.
-    skin: { ...evelyn.materialTuning.skin, warmth: 0.08, subsurfaceStrength: 0.15 },
-    face: { ...evelyn.materialTuning.face, warmth: 0.08, subsurfaceStrength: 0.15 },
+    skin: { ...base.materialTuning.skin, warmth: 0.08, subsurfaceStrength: 0.15 },
+    face: { ...base.materialTuning.face, warmth: 0.08, subsurfaceStrength: 0.15 },
     // VRoid cloth/hair are alpha cut-outs (MToon cutoff 0.5); blending their
     // soft texture borders draws dark halos around buttons, tassels and hems.
-    cloth: { ...evelyn.materialTuning.cloth, alphaTest: 0.5 },
-    hair: { ...evelyn.materialTuning.hair, alphaTest: 0.5 },
+    cloth: { ...base.materialTuning.cloth, alphaTest: 0.5 },
+    hair: { ...base.materialTuning.hair, alphaTest: 0.5 },
   },
   hiddenMaterials: [],
   // 40 fps is visually smooth for an idle/talking avatar and leaves headroom
   // on integrated GPUs, so rendering never starves audio playback.
-  render: { ...evelyn.render, targetFps: 40 },
-  // Evelyn's thinking pose (hand to chin) folds a T-pose-rest arm up behind
+  render: { ...base.render, targetFps: 40 },
+  // The base thinking pose (hand to chin) folds a T-pose-rest arm up behind
   // the head. These were solved numerically so the right hand rests just in
   // front of the chin with the elbow in front of the body.
   gesturePoses: {
@@ -95,10 +95,10 @@ export const SIYA_CHARACTER = {
     },
   },
   physics: {
-    ...evelyn.physics,
+    ...base.physics,
     groups: {
-      hair: { ...evelyn.physics.groups.hair, match: ["Hair"] },
-      skirt: { ...evelyn.physics.groups.coat, match: ["Skirt"] },
+      hair: { ...base.physics.groups.hair, match: ["Hair"] },
+      skirt: { ...base.physics.groups.coat, match: ["Skirt"] },
     },
   },
 };

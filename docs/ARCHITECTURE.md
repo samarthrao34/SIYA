@@ -80,12 +80,13 @@ plaintext and re-encrypt it on the next save.
 
 ## Avatar
 
-The default character is SIYA's own VRoid model
-(`public/assets/characters/siya/SIYA.vrm`, config in
-`src/character/siyaCharacter.ts`). It inherits tuning from the original Evelyn
-PMX character (`public/assets/characters/evelyn/`), which stays as a base
-preset and alternative. `src/character/characterEngine.ts` is the Three.js
-renderer, animation and physics engine.
+SIYA has one character: her own VRoid model
+(`public/assets/characters/siya/SIYA.vrm`, preset in
+`src/character/siyaCharacter.ts`). The preset spreads `BASE_CHARACTER` from
+`src/character/characterEngine.ts`, which holds the shared rig tuning (bone
+map, base pose, idle, gaze, lip-sync, materials, physics) and no model of its
+own. `characterEngine.ts` is the Three.js renderer, animation and physics
+engine; `vrmModelSource.ts` loads the VRM and maps its skeleton onto the rig.
 
 ## Mobile
 

@@ -4155,11 +4155,14 @@ export class CharacterEngine {
     }
   }
 }
-export const EVELYN_CHARACTER = {
-    id: "evelyn",
-    displayName: "Evelyn",
-    modelUrl: "/assets/characters/evelyn/model.pmx",
-    textureMapUrl: "/assets/characters/evelyn/textures.json",
+// Shared rig tuning (MMD bone names, base pose, idle/gaze/lip-sync, materials,
+// lighting, camera, physics). It carries no model of its own: each character
+// preset (see siyaCharacter.ts) spreads it and supplies its modelUrl.
+export const BASE_CHARACTER = {
+    id: "base",
+    displayName: "Base rig",
+    modelUrl: null,
+    textureMapUrl: null,
     scale: 1,
     groundOffset: 0,
     bones: {
@@ -4781,6 +4784,4 @@ export const EVELYN_CHARACTER = {
       maxWeight: 0.92,
       visemeBlendRate: 0.3,
     },
-  },
-  CHARACTER_REGISTRY = { [EVELYN_CHARACTER.id]: EVELYN_CHARACTER },
-  DEFAULT_CHARACTER_ID = EVELYN_CHARACTER.id;
+  };

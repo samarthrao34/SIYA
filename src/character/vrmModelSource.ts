@@ -12,7 +12,7 @@
  *  - Skeleton: VRoid humanoid bones are renamed to their MMD names, and the
  *    MMD control bones VRoid lacks are synthesised (センター, グルーブ,
  *    下半身, 両目 with grants driving 左目/右目), so the character config can
- *    reuse Evelyn's bone map.
+ *    reuse the base rig's bone map.
  *  - Mesh: the VRM's meshes/primitives are merged into one SkinnedMesh with
  *    one material group per primitive; face blend shapes become vertex morphs
  *    named as in the VRM (Fcl_MTH_A, Fcl_EYE_Close, ...).
@@ -24,7 +24,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-/** Scales VRoid's metres so SIYA stands as tall as Evelyn (camera framing). */
+/** Scales VRoid's metres so SIYA stands at the base rig's height (camera framing). */
 const MMD_UNITS_PER_METRE = 13.5;
 
 const SIDE_BONES: Array<[string, string]> = [
