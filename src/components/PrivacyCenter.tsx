@@ -6,14 +6,14 @@
  */
 import { useState } from "react";
 import { ShieldCheck, X, Trash2, LoaderCircle } from "lucide-react";
-import { DataDisclosure, usePrivacyStatus } from "./DataDisclosure";
+import { ActivityAwarenessToggle, DataDisclosure, usePrivacyStatusWithRefresh } from "./DataDisclosure";
 
 export function PrivacyCenter() {
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const privacy = usePrivacyStatus();
+  const [privacy, refreshPrivacy] = usePrivacyStatusWithRefresh();
 
   async function deleteEverything() {
     setDeleting(true);
@@ -60,7 +60,14 @@ export function PrivacyCenter() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            {privacy ? <DataDisclosure status={privacy} /> : <p className="text-white/50">Checking this computer's setup…</p>}
+            {privacy ? (
+              <div className="space-y-4">
+                <ActivityAwarenessToggle status={privacy} onChanged={refreshPrivacy} />
+                <DataDisclosure status={privacy} />
+              </div>
+            ) : (
+              <p className="text-white/50">Checking this computer's setup…</p>
+            )}
             <ul className="mt-4 list-disc space-y-2 pl-5 text-white/70">
               <li>SIYA is a wellness companion, not a therapist, doctor or medical device.</li>
               <li>
@@ -72,9 +79,9 @@ export function PrivacyCenter() {
             <div className="mt-6 rounded-2xl border border-rose-400/20 bg-rose-500/[0.06] p-4">
               <div className="font-medium text-white">Delete all my data</div>
               <p className="mt-1 text-white/60">
-                Erases SIYA's memories, goals and last-session notes, clears her logs, and asks for your consent again. Your
-                settings, Gemini key and learned skills are kept. Data already sent to Google or TypeSafe cannot be deleted from
-                here. This cannot be undone.
+                Erases SIYA's memories, goals, last-session notes and learned skills, clears her logs, and asks for your
+                consent again. Your settings and Gemini key are kept. Data already sent to Google, TypeSafe or Microsoft
+                cannot be deleted from here. This cannot be undone.
               </p>
               {error && <p className="mt-2 text-rose-300">{error}</p>}
               {!confirming ? (

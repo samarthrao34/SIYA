@@ -120,6 +120,13 @@ export class SkillManager {
       .map((skill) => structuredClone(skill));
   }
 
+  /** Forget every learned skill (Privacy Center "delete all my data"). */
+  async forgetAll(): Promise<void> {
+    this.assertLoaded();
+    this.skills = [];
+    await this.persist();
+  }
+
   private async persist(): Promise<void> {
     const payload: SkillFile = { version: 1, skills: this.skills };
     this.writeQueue = this.writeQueue.then(async () => {

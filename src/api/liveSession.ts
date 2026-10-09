@@ -112,6 +112,20 @@ export class LiveSession {
       this.pendingGreeting = !1;
     } else this.pendingGreeting = !0;
   }
+  /**
+   * Tells the server whether Share screen is on. The server only accepts
+   * screen frames and screen tools while this is true (server/privacyControls.ts),
+   * and a new connection starts with it off, so it is re-sent on every connect.
+   */
+  setScreenShareActive(active) {
+    this.screenShareActive = !!active;
+    this.sendScreenShareState();
+  }
+  sendScreenShareState() {
+    this.ws &&
+      this.ws.readyState === WebSocket.OPEN &&
+      this.ws.send(JSON.stringify({ type: "screen_share", active: !!this.screenShareActive }));
+  }
   sendVideoFrame(i, s = {}) {
     this.ws &&
       this.ws.readyState === WebSocket.OPEN &&
@@ -336,6 +350,7 @@ export class LiveSession {
                   r.status === "connecting_gemini" ||
                     (r.status === "connected"
                       ? ((this.liveReady = !0),
+                        this.sendScreenShareState(),
                         this.pendingGreeting && this.requestGreeting(),
                         clearTimeout(this.connectTimer),
                         (this.reconnectAttempts = 0),

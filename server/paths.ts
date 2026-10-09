@@ -19,8 +19,19 @@ import path from "path";
 /** Writable per-user data directory. Falls back to cwd in development. */
 export const DATA_DIR: string = process.env.SIYA_DATA_DIR || process.cwd();
 
+/** Best-effort owner-only permissions; a no-op where chmod is unsupported. */
+export function restrictToOwner(target: string, mode = 0o600): void {
+  try {
+    fs.chmodSync(target, mode);
+  } catch {
+    /* missing file or unsupported filesystem */
+  }
+}
+
 try {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  // Only the dedicated per-user folder; in development DATA_DIR is the repo.
+  if (process.env.SIYA_DATA_DIR) restrictToOwner(DATA_DIR, 0o700);
 } catch {
   /* already exists / best-effort */
 }
