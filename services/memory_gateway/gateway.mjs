@@ -16,7 +16,7 @@
  * Run on the memory-server host (see README.md in this folder):
  *   GATEWAY_LISTEN=100.x.y.z:20142 UPSTREAM_URL=http://127.0.0.1:20141 \
  *   UPSTREAM_TOKEN_FILE=~/.config/siya-memory-gateway/token \
- *   ALLOWED_DEVICES=my-phone node services/memory_gateway/gateway.mjs
+ *   ALLOWED_NODE_IDS=nXXXXXXXCNTRL=my-phone node services/memory_gateway/gateway.mjs
  */
 import { execFile } from "node:child_process";
 import fs from "node:fs";
@@ -36,9 +36,32 @@ const UPSTREAM_TIMEOUT_MS = 20_000;
 const WHOIS_TTL_MS = 60_000;
 
 function identityFrom(info) {
+  const nodeId = String(info?.Node?.StableID || "");
   const device = String(info?.Node?.ComputedName || info?.Node?.Name || "").split(".")[0].toLowerCase();
   const login = String(info?.UserProfile?.LoginName || "").toLowerCase();
-  return device ? { device, login } : null;
+  return nodeId ? { nodeId, device, login } : null;
+}
+
+/** Tailscale stable node IDs, e.g. "nQdER5391E11CNTRL". Never reused. */
+const STABLE_NODE_ID = /^n[A-Za-z0-9]{6,}CNTRL$/;
+
+/**
+ * Parses ALLOWED_NODE_IDS: comma-separated "<stable-node-id>=<label>" entries,
+ * or the single word "none" (run, but allow no device). Device *names* are
+ * not accepted: a name can be renamed or taken over by a new device after
+ * the old one is removed, while a stable node ID cannot.
+ */
+export function parseAllowedNodes(spec) {
+  const value = String(spec ?? "").trim();
+  if (value.toLowerCase() === "none") return new Map();
+  if (!value) throw new Error('ALLOWED_NODE_IDS is empty: set "none" to deny every device explicitly.');
+  const allowed = new Map();
+  for (const entry of value.split(",").map((e) => e.trim()).filter(Boolean)) {
+    const [id, label = ""] = entry.split("=").map((part) => part.trim());
+    if (!STABLE_NODE_ID.test(id)) throw new Error(`Not a Tailscale stable node ID: "${id}". Use the ID from \`tailscale status --json\`.`);
+    allowed.set(id, label || id);
+  }
+  return allowed;
 }
 
 /**
@@ -100,14 +123,13 @@ export function createGatewayHandler({
   whois = tailscaleWhois,
   readToken,
   upstreamUrl,
-  allowedDevices,
+  allowedNodes,
   routes = DEFAULT_ROUTES,
   fetchImpl = fetch,
   log = (line) => console.log(line),
   now = () => Date.now(),
 }) {
-  const allowed = new Set(allowedDevices.map((d) => d.trim().toLowerCase()).filter(Boolean));
-  if (allowed.size === 0) throw new Error("ALLOWED_DEVICES is empty: refusing to start an open gateway.");
+  const allowed = allowedNodes instanceof Map ? allowedNodes : parseAllowedNodes(allowedNodes);
   const upstream = new URL(upstreamUrl);
   const cache = new Map();
 
@@ -135,7 +157,8 @@ export function createGatewayHandler({
 
     const identity = await identify(peer);
     if (!identity) return deny(res, 403, "Caller is not an identified tailnet device.", peer);
-    if (!allowed.has(identity.device)) return deny(res, 403, "Device is not allowed.", identity.device);
+    const who = `${identity.device} (${identity.nodeId})`;
+    if (!allowed.has(identity.nodeId)) return deny(res, 403, "Device is not allowed.", who);
 
     const chunks = [];
     let size = 0;
@@ -144,7 +167,7 @@ export function createGatewayHandler({
       if (size > MAX_BODY_BYTES) {
         // Answer, then drop the connection so the client stops uploading.
         res.setHeader("Connection", "close");
-        deny(res, 413, "Request too large.", identity.device);
+        deny(res, 413, "Request too large.", who);
         req.destroy();
         return;
       }
@@ -155,7 +178,7 @@ export function createGatewayHandler({
     try {
       token = readToken();
     } catch {
-      return deny(res, 500, "Gateway token unavailable.", identity.device);
+      return deny(res, 500, "Gateway token unavailable.", who);
     }
 
     const target = new URL(url.pathname + url.search, upstream);
@@ -169,13 +192,13 @@ export function createGatewayHandler({
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       });
       const body = Buffer.from(await upstreamRes.arrayBuffer());
-      log(`allow ${upstreamRes.status} ${identity.device} ${req.method} ${url.pathname}`);
+      log(`allow ${upstreamRes.status} ${allowed.get(identity.nodeId)} ${who} ${req.method} ${url.pathname}`);
       res.writeHead(upstreamRes.status, {
         "Content-Type": upstreamRes.headers.get("content-type") || "application/octet-stream",
       });
       res.end(body);
     } catch {
-      deny(res, 502, "Memory server unreachable.", identity.device);
+      deny(res, 502, "Memory server unreachable.", who);
     }
   };
 }
@@ -190,10 +213,15 @@ function main() {
   const mode = fs.statSync(tokenFile).mode & 0o077;
   if (mode) throw new Error(`${tokenFile} must not be readable by group or others (chmod 600).`);
 
+  if (process.env.ALLOWED_DEVICES) {
+    throw new Error("ALLOWED_DEVICES (device names) is no longer accepted; use ALLOWED_NODE_IDS with stable node IDs.");
+  }
+  const allowedNodes = parseAllowedNodes(process.env.ALLOWED_NODE_IDS);
+  console.log(`allowed devices: ${allowedNodes.size === 0 ? "none" : [...allowedNodes.values()].join(", ")}`);
   const handler = createGatewayHandler({
     readToken: () => fs.readFileSync(tokenFile, "utf8").trim(),
     upstreamUrl: process.env.UPSTREAM_URL || "http://127.0.0.1:20141",
-    allowedDevices: (process.env.ALLOWED_DEVICES || "").split(","),
+    allowedNodes,
   });
   http.createServer((req, res) => void handler(req, res)).listen(port, host, () => {
     console.log(`SIYA memory gateway listening on ${host}:${port}`);

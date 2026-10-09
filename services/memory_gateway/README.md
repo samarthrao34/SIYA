@@ -6,7 +6,7 @@ no secret. It runs on the memory-server host, next to the server.
 - Callers are identified by their **Tailscale device** (`tailscale whois` on the
   connection's source address). Tailscale authenticates every peer with
   WireGuard keys, so the identity cannot be faked from the tailnet or outside it.
-- Only devices in `ALLOWED_DEVICES` are served, and only the four routes the
+- Only devices whose **stable node ID** is in `ALLOWED_NODE_IDS` are served, and only the four routes the
   mobile client uses (`POST /ingest`, `POST /reindex`, `GET /raw`, `POST /query`).
 - The gateway adds the memory server's bearer token itself. The token lives in
   a `0600` file on the server and never reaches a client, a build, or an APK.
@@ -22,17 +22,21 @@ no secret. It runs on the memory-server host, next to the server.
    # write the server's (new, rotated) token into this file with your editor
    chmod 600 ~/.config/siya-memory-gateway/token
    ```
-3. Find your phone's tailnet device name with `tailscale status`.
+3. Find each approved device's stable node ID (the `ID` field) with
+   `tailscale status --json`. Device names are not accepted: a name can be
+   renamed or taken over by a new device after the old one is removed, while a
+   stable node ID is never reused.
 4. Run the gateway (Node 20+), bound to the host's tailnet IP:
    ```sh
    GATEWAY_LISTEN=<tailnet-ip>:20142 \
    UPSTREAM_URL=http://127.0.0.1:20141 \
    UPSTREAM_TOKEN_FILE=~/.config/siya-memory-gateway/token \
-   ALLOWED_DEVICES=<phone-device-name> \
+   ALLOWED_NODE_IDS=<stable-node-id>=<label>,... \
    node services/memory_gateway/gateway.mjs
    ```
-   It refuses to start with an empty allowlist, a `0.0.0.0` bind, or a token
-   file readable by others.
+   `ALLOWED_NODE_IDS=none` runs the gateway but allows no device. It refuses
+   to start with an empty or malformed allowlist, a `0.0.0.0` bind, a token
+   file readable by others, or the old name-based `ALLOWED_DEVICES`.
 5. Point the mobile build at it: `VITE_SIYA_MEMORY_URL=http://<tailnet-ip>:20142`
    in `mobile/app/.env`. No token variable is needed any more.
 
