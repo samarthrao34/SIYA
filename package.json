@@ -1,10 +1,11 @@
 {
   "name": "siya",
   "productName": "SIYA",
-  "description": "SIYA — a private 3D AI desktop companion powered by each user's own Gemini API key.",
+  "description": "SIYA \u2014 a private 3D AI desktop companion powered by each user's own Gemini API key.",
   "author": "SIYA",
   "private": true,
   "version": "1.0.1",
+  "license": "MIT",
   "type": "module",
   "main": "electron/main.cjs",
   "repository": {

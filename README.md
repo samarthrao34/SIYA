@@ -14,6 +14,7 @@
   <img alt="Three.js" src="https://img.shields.io/badge/Three.js-0.180-000000?logo=threedotjs" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
   <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" />
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg" /></a>
 </p>
 
 ---
@@ -216,6 +217,10 @@ care.
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the pieces fit together
 - [docs/RELIABILITY.md](docs/RELIABILITY.md): reconnects, tray behaviour, updates and packaging
+
+## License
+
+Released under the [MIT License](LICENSE).
 
 ## Author
 
