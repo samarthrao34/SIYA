@@ -3540,7 +3540,8 @@ async function startServer() {
     // Kick off the desktop agent (probe + auto-spawn) immediately on boot.
     ensureDesktopAgent()
       .then(async () => {
-        await ensureDesktopObserver();
+        // Finds the observer only if activity awareness is on, so nothing about
+        // the desktop is read at startup without it.
         await applyActivityAwareness();
       })
       .catch((e) => console.warn(`[Desktop Agent] Boot probe failed: ${e?.message || e}`));
