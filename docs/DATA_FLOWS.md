@@ -25,8 +25,9 @@ screen and stopping or pausing it.
 - Every call to the desktop agent and to Electron's screen capture goes through
   one gate, `createGatedAgentCaller`. Screen-content tools (`takeScreenshot`,
   `saveScreenshot`, `analyzeScreenshot`, `readScreen`, `viewScreen`,
-  `locateText`, `clickText`, `waitForUi`) are refused unless a session is
-  sharing. A capture still running when sharing stops (or restarts) is
+  `locateText`, `clickText`, `waitForUi`) are refused unless the live session making the call is
+  sharing; one window sharing never authorises another, and calls with no
+  session (such as `/api/screen-vision` without a live window) are refused. A capture still running when sharing stops (or restarts) is
   discarded, not returned.
 - Proactive check-ins never take screenshots; they can only use frames from a
   share already in progress. "Look at my screen" without sharing captures
@@ -43,6 +44,10 @@ screen and stopping or pausing it.
   carry no app or window name, the remembered app/window are cleared, and
   window titles, app names and similar fields are removed from every
   desktop-tool result before the model sees it (`redactActivity`).
+- Some window tools name the window only in their result text
+  (`minimizeWindow`, `maximizeWindow`, `closeWindow`, `switchApplication`,
+  `locateText`, `clickText`); without activity awareness that text is
+  replaced with a neutral sentence (`TITLE_IN_TEXT_TOOLS`).
 - On: the active app name and window title can be sent with proactive
   check-ins and returned by those tools.
 - A shared screen still shows whatever is on it, including window titles in
@@ -59,7 +64,7 @@ screen and stopping or pausing it.
 | **Screen frames**: JPEG, max 720 px, every 2.5 s when the screen changes (30 s heartbeat) | Only while Share screen is on | Google Gemini Live | `MainExperience.tsx`, `server/index.ts` |
 | **Screenshots and screen text** from the tools above | Only while Share screen is on | Google Gemini Live | `server/privacyControls.ts`, `server/screenVision.ts` |
 | **Active app name and window title** | Only with Activity awareness on | Google Gemini Live, as text | `server/cognition/desktopPerception.ts`, `server/index.ts` (`buildInitiativePrompt`) |
-| Last ≤ 12 dialogue turns and **up to 30 memories most related to them** (all memories if there are 30 or fewer) | After turns, to consolidate memories | Google Gemini (`generateContent`) | `server/memory.ts` (`selectMemoriesForConsolidation`, `processConversationSlice`) |
+| Last ≤ 12 dialogue turns and **up to 30 memories most related to them** (all memories if there are 30 or fewer, or when the user's words look like a correction or a request to forget, so the stale fact can be updated) | After turns, to consolidate memories | Google Gemini (`generateContent`) | `server/memory.ts` (`selectMemoriesForConsolidation`, `processConversationSlice`) |
 | A few relevant memories | At session start | Google Gemini Live (system prompt) | `server/index.ts` |
 | Goal objective, constraints, success criteria | When a goal is planned | Google Gemini (`generateContent`) | `server/cognition/planner.ts` |
 | **What the user says or types** (turns ≥ 12 characters, first 2,000) | After each turn, only if `TYPESAFE_API_KEY` is set and `SIYA_TEXT_EMOTION` is not `off` | TypeSafe (`api.typesafe.ai`) | `server/textEmotion.ts` |

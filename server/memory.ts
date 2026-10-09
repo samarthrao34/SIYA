@@ -93,13 +93,26 @@ function wordsOf(text: string): Set<string> {
  * Gemini only what it needs to update instead of everything SIYA remembers.
  * Ranked by shared words with the dialogue, then by most recently updated.
  * Edits are still applied to the full list, so unsent memories are untouched.
+ * Corrections send everything (see CORRECTION_CUE).
  */
+/**
+ * The user correcting or retracting something ("I moved", "not anymore",
+ * "forget that", "ab nahi", "galat"). The stale memory may share no words with
+ * the correction, so such turns get the full list and it can be updated.
+ */
+const CORRECTION_CUE =
+  /\b(actually|no longer|not any ?more|anymore|moved|changed|switched|quit|stopped|left|instead|wrong|correction|forget|remove that|used to|ex-|now i)\b|\b(ab nahi|ab se|galat|bhool ja|bhool jao|badal|chhod)|अब नहीं|गलत|भूल जा/i;
+
+export function isCorrectionDialogue(dialogue: { role: string; text: string }[]): boolean {
+  return dialogue.some((line) => line.role === "user" && CORRECTION_CUE.test(line.text));
+}
+
 export function selectMemoriesForConsolidation(
   memories: Memory[],
   dialogue: { role: string; text: string }[],
   limit = CONSOLIDATION_MEMORY_LIMIT,
 ): Memory[] {
-  if (memories.length <= limit) return memories;
+  if (memories.length <= limit || isCorrectionDialogue(dialogue)) return memories;
   const dialogueWords = wordsOf(dialogue.map((line) => line.text).join(" "));
   return memories
     .map((memory) => {

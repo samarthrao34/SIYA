@@ -301,7 +301,8 @@ in [docs/DATA_FLOWS.md](docs/DATA_FLOWS.md). In short:
 - **Sent to Google Gemini (default mode).** Your voice and typed messages; a
   camera still every 2.5 s while the camera is on, plus the expression and
   behaviour labels read from it; shared-screen frames; recent conversation
-  with up to 30 related memories for memory updates; goals you plan.
+  with up to 30 related memories for memory updates (all of them when you
+  correct something); goals you plan.
   Depending on your Gemini plan, Google may use this data to improve its
   products.
 - **Sent to TypeSafe (optional).** What you say or type, to read its emotional

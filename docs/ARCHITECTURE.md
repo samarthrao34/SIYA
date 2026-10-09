@@ -48,7 +48,7 @@ mic (pcm-capture-worklet) ─► src/api/liveSession.ts ─► ws /live ─► s
   `services/desktop_agent/tools_confirmation.py`.
 - **Privacy gates** (`server/privacyControls.ts`): every desktop-agent call,
   including Electron screen capture, passes `createGatedAgentCaller`. Screen
-  tools work only while the session has Share screen on; activity tools and
+  tools work only for the live session that has Share screen on; activity tools and
   any app or window names in results need the Activity awareness setting.
   See [DATA_FLOWS.md](DATA_FLOWS.md#the-two-privacy-switches).
 - **Screen vision** (`server/screenVision.ts`) spots "look at my screen"

@@ -37,7 +37,16 @@ export const ACTIVITY_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 export type AgentResult = { ok: boolean; result?: unknown; error?: string; blocked?: "screen" | "activity" };
-export type AgentCall = (tool: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<AgentResult>;
+/** Which live session a call is made for. Screen tools need one that is sharing. */
+export interface AgentCallContext {
+  connectionId?: string;
+}
+export type AgentCall = (
+  tool: string,
+  args: Record<string, unknown>,
+  signal?: AbortSignal,
+  context?: AgentCallContext,
+) => Promise<AgentResult>;
 
 export const SCREEN_OFF_MESSAGE =
   "Screen access is off. SIYA can only see the screen while the user has Share screen switched on. " +
@@ -51,32 +60,35 @@ export const ACTIVITY_OFF_MESSAGE =
 export class PrivacyControls {
   /** connectionId -> whether that live session currently shares its screen. */
   private readonly screenShares = new Map<string, boolean>();
-  /** Bumped on every screen-access change; in-flight captures compare it. */
-  private screenEpoch = 0;
+  /** Per session, bumped on every change; in-flight captures compare it. */
+  private readonly screenEpochs = new Map<string, number>();
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly activityAwarenessEnabled: () => boolean) {}
 
   setScreenShare(connectionId: string, active: boolean): void {
-    const before = this.isScreenAccessActive();
     if (active) this.screenShares.set(connectionId, true);
     else this.screenShares.delete(connectionId);
-    if (before !== this.isScreenAccessActive() || !active) this.screenEpoch += 1;
+    this.bumpEpoch(connectionId);
     this.notify();
   }
 
   /** A live session ended: whatever it was sharing stops counting. */
   endConnection(connectionId: string): void {
-    if (this.screenShares.delete(connectionId)) {
-      this.screenEpoch += 1;
-      this.notify();
-    }
+    this.screenShares.delete(connectionId);
+    this.bumpEpoch(connectionId);
+    this.notify();
+  }
+
+  private bumpEpoch(connectionId: string): void {
+    this.screenEpochs.set(connectionId, (this.screenEpochs.get(connectionId) || 0) + 1);
   }
 
   isScreenShareActive(connectionId: string): boolean {
     return this.screenShares.get(connectionId) === true;
   }
 
+  /** Any session sharing (for status display only, never for authorisation). */
   isScreenAccessActive(): boolean {
     for (const active of this.screenShares.values()) if (active) return true;
     return false;
@@ -86,8 +98,8 @@ export class PrivacyControls {
     return this.activityAwarenessEnabled();
   }
 
-  currentScreenEpoch(): number {
-    return this.screenEpoch;
+  currentScreenEpoch(connectionId: string): number {
+    return this.screenEpochs.get(connectionId) || 0;
   }
 
   onChange(listener: () => void): () => void {
@@ -107,6 +119,20 @@ export class PrivacyControls {
 }
 
 const IDENTIFYING_KEY = /title|window|application|app_?name|process|class/i;
+
+/**
+ * Agent tools whose result *text* names the window they acted on, with no
+ * separate field to redact (services/desktop_agent/tools_windows.py and
+ * tools_targeting.py). Without activity awareness their text is replaced.
+ */
+export const TITLE_IN_TEXT_TOOLS: Readonly<Record<string, string>> = {
+  minimizeWindow: "Minimized the window.",
+  maximizeWindow: "Maximized the window.",
+  closeWindow: "Closed the window.",
+  switchApplication: "Switched to the requested app.",
+  locateText: "Located the visible label.",
+  clickText: "Clicked the visible label.",
+};
 
 /**
  * Removes window titles and app names from a tool result. Structured fields
@@ -148,25 +174,34 @@ export function redactActivity(result: unknown): unknown {
 
 /**
  * Wraps the raw desktop-agent caller so screen and activity gates apply to
- * every path that reaches the agent.
+ * every path that reaches the agent. Screen tools are authorised per session:
+ * only a call made for a session that is sharing may capture, and only that
+ * session receives the result.
  */
 export function createGatedAgentCaller(raw: AgentCall, controls: PrivacyControls): AgentCall {
-  return async (tool, args, signal) => {
-    if (SCREEN_CONTENT_TOOLS.has(tool) && !controls.isScreenAccessActive()) {
+  return async (tool, args, signal, context) => {
+    const connectionId = context?.connectionId;
+    const isScreenTool = SCREEN_CONTENT_TOOLS.has(tool);
+    if (isScreenTool && !(connectionId && controls.isScreenShareActive(connectionId))) {
       return { ok: false, error: SCREEN_OFF_MESSAGE, blocked: "screen" };
     }
     if (ACTIVITY_TOOLS.has(tool) && !controls.isActivityAwarenessActive()) {
       return { ok: false, error: ACTIVITY_OFF_MESSAGE, blocked: "activity" };
     }
-    const epoch = controls.currentScreenEpoch();
-    const response = await raw(tool, args, signal);
-    if (SCREEN_CONTENT_TOOLS.has(tool)) {
-      if (controls.currentScreenEpoch() !== epoch || !controls.isScreenAccessActive()) {
+    const epoch = connectionId ? controls.currentScreenEpoch(connectionId) : 0;
+    const response = await raw(tool, args, signal, context);
+    if (isScreenTool && connectionId) {
+      if (controls.currentScreenEpoch(connectionId) !== epoch || !controls.isScreenShareActive(connectionId)) {
         return { ok: false, error: SCREEN_REVOKED_MESSAGE, blocked: "screen" };
       }
     }
     if (!controls.isActivityAwarenessActive() && response.ok) {
-      return { ...response, result: redactActivity(response.result) };
+      let result = redactActivity(response.result);
+      const neutral = TITLE_IN_TEXT_TOOLS[tool];
+      if (neutral && result && typeof result === "object" && typeof (result as Record<string, unknown>).result === "string") {
+        result = { ...(result as Record<string, unknown>), result: neutral };
+      }
+      return { ...response, result };
     }
     return response;
   };

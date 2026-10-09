@@ -26,7 +26,7 @@ test('screen tools are refused by default and the agent is never called', async 
   const agent = fakeAgent();
   const call = createGatedAgentCaller(agent.raw, controls);
   for (const tool of SCREEN_CONTENT_TOOLS) {
-    const res = await call(tool, {});
+    const res = await call(tool, {}, undefined, { connectionId: 'conn-a' });
     assert.equal(res.ok, false, tool);
     assert.equal(res.blocked, 'screen', tool);
   }
@@ -41,7 +41,7 @@ test('Share screen on allows screen tools for that session only', async () => {
   controls.setScreenShare('conn-a', true);
   assert.equal(controls.isScreenShareActive('conn-a'), true);
   assert.equal(controls.isScreenShareActive('conn-b'), false);
-  const res = await call('viewScreen', {});
+  const res = await call('viewScreen', {}, undefined, { connectionId: 'conn-a' });
   assert.equal(res.ok, true);
   assert.deepEqual(agent.calls, ['viewScreen']);
 });
@@ -51,9 +51,9 @@ test('turning Share screen off refuses the next capture', async () => {
   const agent = fakeAgent();
   const call = createGatedAgentCaller(agent.raw, controls);
   controls.setScreenShare('conn-a', true);
-  assert.equal((await call('takeScreenshot', {})).ok, true);
+  assert.equal((await call('takeScreenshot', {}, undefined, { connectionId: 'conn-a' })).ok, true);
   controls.setScreenShare('conn-a', false);
-  const res = await call('takeScreenshot', {});
+  const res = await call('takeScreenshot', {}, undefined, { connectionId: 'conn-a' });
   assert.equal(res.blocked, 'screen');
   assert.deepEqual(agent.calls, ['takeScreenshot']);
 });
@@ -64,7 +64,7 @@ test('a capture in flight when sharing stops is discarded, not returned', async 
   const call = createGatedAgentCaller(agent.raw, controls);
   controls.setScreenShare('conn-a', true);
   agent.hold();
-  const pending = call('viewScreen', {});
+  const pending = call('viewScreen', {}, undefined, { connectionId: 'conn-a' });
   await new Promise((resolve) => setImmediate(resolve));
   controls.setScreenShare('conn-a', false);
   agent.release();
@@ -80,12 +80,45 @@ test('a capture in flight across stop-and-restart is still discarded', async () 
   const call = createGatedAgentCaller(agent.raw, controls);
   controls.setScreenShare('conn-a', true);
   agent.hold();
-  const pending = call('viewScreen', {});
+  const pending = call('viewScreen', {}, undefined, { connectionId: 'conn-a' });
   await new Promise((resolve) => setImmediate(resolve));
   controls.setScreenShare('conn-a', false);
   controls.setScreenShare('conn-a', true);
   agent.release();
   assert.equal((await pending).blocked, 'screen');
+});
+
+test('sharing in one session does not authorise captures for another', async () => {
+  const controls = new PrivacyControls(() => true);
+  const agent = fakeAgent();
+  const call = createGatedAgentCaller(agent.raw, controls);
+  controls.setScreenShare('conn-a', true);
+  const res = await call('viewScreen', {}, undefined, { connectionId: 'conn-b' });
+  assert.equal(res.blocked, 'screen');
+  assert.deepEqual(agent.calls, []);
+});
+
+test('screen tools without a session are always refused', async () => {
+  const controls = new PrivacyControls(() => true);
+  const agent = fakeAgent();
+  const call = createGatedAgentCaller(agent.raw, controls);
+  controls.setScreenShare('conn-a', true);
+  assert.equal((await call('takeScreenshot', {})).blocked, 'screen');
+  assert.deepEqual(agent.calls, []);
+});
+
+test('another session stopping does not cancel this session\'s capture', async () => {
+  const controls = new PrivacyControls(() => true);
+  const agent = fakeAgent();
+  const call = createGatedAgentCaller(agent.raw, controls);
+  controls.setScreenShare('conn-a', true);
+  controls.setScreenShare('conn-b', true);
+  agent.hold();
+  const pending = call('viewScreen', {}, undefined, { connectionId: 'conn-a' });
+  await new Promise((resolve) => setImmediate(resolve));
+  controls.setScreenShare('conn-b', false);
+  agent.release();
+  assert.equal((await pending).ok, true);
 });
 
 test('a session that closes stops counting as sharing', async () => {
@@ -94,7 +127,7 @@ test('a session that closes stops counting as sharing', async () => {
   controls.setScreenShare('conn-a', true);
   controls.endConnection('conn-a');
   assert.equal(controls.isScreenAccessActive(), false);
-  assert.equal((await call('readScreen', {})).blocked, 'screen');
+  assert.equal((await call('readScreen', {}, undefined, { connectionId: 'conn-a' })).blocked, 'screen');
 });
 
 test('activity tools are refused while activity awareness is off', async () => {
@@ -126,6 +159,20 @@ test('window titles and app names are removed from tool results without activity
   assert.equal(res.result.title, undefined);
   assert.equal(res.result.application, undefined);
   assert.doesNotMatch(JSON.stringify(res.result), /Bank statement|okular/i);
+});
+
+test('titles that appear only in result text are removed without activity awareness', async () => {
+  const controls = new PrivacyControls(() => false);
+  for (const [tool, text] of [
+    ['minimizeWindow', 'Minimized window: Payslip March.pdf (moved to special workspace).'],
+    ['switchApplication', 'Switched to: Private chat - Signal.'],
+    ['closeWindow', 'Closed window: Diary.txt - Editor.'],
+  ]) {
+    const call = createGatedAgentCaller(fakeAgent({ ok: true, result: { result: text } }).raw, controls);
+    const res = await call(tool, {});
+    assert.equal(res.ok, true, tool);
+    assert.doesNotMatch(JSON.stringify(res.result), /Payslip|Signal|Diary/, tool);
+  }
 });
 
 test('results pass through unchanged with activity awareness on', async () => {

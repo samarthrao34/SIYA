@@ -685,9 +685,13 @@ async function startServer() {
   const toolExecutor = new ToolExecutor({
     config: cognition.config,
     registry: toolRegistry,
-    handler: (tool, args, signal) => API_HUB_TOOLS.has(tool)
+    handler: (tool, args, signal, context) => API_HUB_TOOLS.has(tool)
       ? callApiHubTool(tool, args, signal)
-      : callDesktopAgent(tool, args, signal),
+      : callDesktopAgent(tool, args, signal, {
+        // Live-session calls use "<connectionId>:<callId>" correlation IDs, so
+        // a confirmed call still knows which session (and share) it is for.
+        connectionId: context?.connectionId || context?.correlationId?.split(":")[0],
+      }),
     emit: (event) => cognition.process(event).then(() => undefined),
   });
   const modelRouter = new ModelRouter({
@@ -2870,6 +2874,7 @@ async function startServer() {
                       fc.args as Record<string, unknown>,
                       {
                         correlationId: `${connectionId}:${fc.id}`,
+                        connectionId,
                         projectRoot: process.env.SIYA_APP_ROOT || process.cwd(),
                       },
                     );
@@ -2987,7 +2992,8 @@ async function startServer() {
       // uses the same `callAgent` helper as the rest of the server, so the
       // function declarations and registration stay in lockstep.
       screenVision = new ScreenVisionPipeline({
-        callAgent: callDesktopAgent,
+        // Bound to this session: its captures need this session's Share screen.
+        callAgent: (tool, args) => callDesktopAgent(tool, args, undefined, { connectionId }),
         pushFrameToSession: ({ data, mimeType }) => {
           session.sendRealtimeInput({ video: { data, mimeType } });
           lastSharedScreenFrameAt = Date.now();

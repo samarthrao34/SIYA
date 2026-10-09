@@ -24,3 +24,18 @@ test('ties are broken by most recently updated', () => {
   assert.equal(selected.length, 5);
   assert.equal(selected[0].id, 'new');
 });
+
+test('corrections send every memory so a stale fact can be updated', () => {
+  const filler = Array.from({ length: 60 }, (_, i) => memory(`f${i}`, `Unrelated fact number ${i} about gardening`));
+  const stale = memory('paris', 'The user lives in Paris');
+  for (const said of ['I moved last month', 'Actually I quit that job', 'Forget what I said about the trip', 'Ab nahi rehta wahan', 'गलत है']) {
+    const selected = selectMemoriesForConsolidation([...filler, stale], [{ role: 'user', text: said }]);
+    assert.equal(selected.length, 61, said);
+  }
+});
+
+test('SIYA\'s own words do not trigger the full list', () => {
+  const filler = Array.from({ length: 60 }, (_, i) => memory(`f${i}`, `Fact ${i}`));
+  const selected = selectMemoriesForConsolidation(filler, [{ role: 'model', text: 'Actually, you moved?' }, { role: 'user', text: 'hello' }]);
+  assert.equal(selected.length, CONSOLIDATION_MEMORY_LIMIT);
+});

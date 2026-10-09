@@ -82,8 +82,9 @@ export function DataDisclosure({ status }: { status: PrivacyStatus }) {
             computer.
           </li>
           <li>
-            Recent conversation together with up to 30 of your saved memories most related to it, to decide what to
-            remember; and a few relevant memories at the start of each conversation.
+            Recent conversation together with up to 30 of your saved memories most related to it (all of them when you
+            correct something or ask SIYA to forget), to decide what to remember; and a few relevant memories at the
+            start of each conversation.
           </li>
           <li>Goals you ask SIYA to plan.</li>
           <li>
